@@ -1,0 +1,43 @@
+# Environment
+.env
+.env.local
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg
+*.egg-info/
+.eggs/
+dist/
+build/
+*.manifest
+*.spec
+
+# Testing / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# Type checkers / linters
+.mypy_cache/
+.ruff_cache/
+
+# IDE / editor
+.idea/
+*.swp
+*.swo
+*~
+
+# App data (local DB)
+data/calorie_data.json
+data/calorie_data.json.bak

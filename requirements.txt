@@ -1,0 +1,14 @@
+# 3.13.x pins pydantic<2.9; 3.20+ allows pydantic 2.10 (per plan).
+aiogram==3.20.0
+pydantic>=2.10,<2.11
+instructor==1.15.*
+litellm==1.61.*
+jinja2==3.1.*
+apscheduler==3.10.*
+python-dotenv==1.0.*
+filelock==3.16.*
+requests==2.32.*
+python-dateutil==2.9.*
+pandas==2.2.*
+google-genai
+jsonref>=1.1.0
