@@ -8,16 +8,21 @@
 ## App specification:
 
 - user-LLM-agent SESSION: when user send a message in telegram, this trigger the agent to send a API request to LLM asking what to do, after getting the response from LLM, agent perform the associated function call parsed from LLM response, then it reply to user. All of that set of operation is called a SESSION.
-- Action: * action is an action that the agent need to do triggered by user's message. This app has a set of predefined section including:
-    - refuse to answer (not related to calorie tracking)
-    - log meal
-    - modify meal
-    - set goal
-    - modify goal
-    - get report
-    ....
-    * an action may involves in only 1 session, or multiple sessions. Multiple sessions will be involved if the user's intention is unclear (the action is determined but the params for the action is unclear), in that case, multiple follow-up session is instantiated to clarify user's intention.
-    + an action can be cancelled
+- Action: 
+    - action is an action that the agent need to do triggered by user's message. This app has a set of predefined action including:
+        - refuse to answer (not related to calorie tracking)
+        - log meal
+        - modify meal
+        - set goal
+        - modify goal
+        - get report
+    - an action may involves in only 1 session, or multiple sessions. Multiple sessions will be involved if the user's intention is unclear (the action is determined but the params for the action is unclear), in that case, multiple follow-up session is instantiated to clarify user's intention.
+    - an action can be cancelled
+    - the interaction between the agent and user are essentially just actions
+    - each message exchange between user and agent belongs to just one action, it is used to either instantiate a new action, finish the current action, or clarify the current action
+    - in order to provide the context for agent, instead of injecting past message exchange, we will inject past actions (maybe injecting a slide window of actions, 10 most recent for example), because this agent centralizes around action, not general chatting. 
+    - past actions performed by agent will be stored in a file-based database, maybe json file. Each entry of this action database may contain field like action_type, created_at, updated_at, others property related to each action type, maybe also have a field contains text summarizing the user-agent interaction...
+    
 
 ## The tech stack:
 
