@@ -8,8 +8,7 @@
 ## App specification:
 
 - user-LLM-agent SESSION: when user send a message in telegram, this trigger the agent to send a API request to LLM asking what to do, after getting the response from LLM, agent perform the associated function call parsed from LLM response, then it reply to user. All of that set of operation is called a SESSION.
-- Action: * action is an action that the agent need to do triggered by user's message
-    this app has a set of predefined section including:
+- Action: * action is an action that the agent need to do triggered by user's message. This app has a set of predefined section including:
     - refuse to answer (not related to calorie tracking)
     - log meal
     - modify meal
