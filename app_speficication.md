@@ -5,9 +5,10 @@
 - design more tools, extending agent ability
 - refine project structure
 
-## App specification:
+## App specification - brain storming:
 
 - user-LLM-agent SESSION: when user send a message in telegram, this trigger the agent to send a API request to LLM asking what to do, after getting the response from LLM, agent perform the associated function call parsed from LLM response, then it reply to user. All of that set of operation is called a SESSION.
+                          1 session = user message + LLM response + agent do something 
 - Action: 
     - action is an action that the agent need to do triggered by user's message. This app has a set of predefined action including:
         - refuse to answer (not related to calorie tracking)
@@ -21,12 +22,27 @@
     - the interaction between the agent and user are essentially just actions
     - each message exchange between user and agent belongs to just one action, it is used to either instantiate a new action, finish the current action, or clarify the current action
     - in order to provide the context for agent, instead of injecting past message exchange, we will inject past actions (maybe injecting a slide window of actions, 10 most recent for example), because this agent centralizes around action, not general chatting. 
+      aside from the context about past action, we also need to provide the context of current action. If the current action resolved after just 1 session, then well, the current action context is empty. But if the current action context extented over multiple sessions, then in each new session, we need to inject past interaction in the current action. 
+
+      Context: 
+            1. Past actions (10 latest): list of past actions in structured format
+            2. current action context: user-agent exchanged message in current action
     - past actions performed by agent will be stored in a file-based database, maybe json file. Each entry of this action database may contain field like action_type, created_at, updated_at, others property related to each action type, maybe also have a field contains text summarizing the user-agent interaction...
+
+- more about the workflow of an Action:
+    - for each LLM response, it's either, an attempt-to-clarify: "I'm not sure what the user wanted, so I need to ask 1 more question to clarify" or point-out-the-action: "I'm pretty sure what the user wanted now, he/she want to log his/her meal, which consists of 2 eggs, 1 banana, 200gr of sweet potato".
+    - if the LLM response is attempt-to-clarify, the only thing the app will do is reponse to user with the LLM message, it can be "for clarity, how many apple you have for lunch?" (clarify user's intention), then grab the user's reponse and start another session, this loop continues until the LLM finally return with a point-out-the-action, which is the final verdict on what action to take log meal, modify log meal, set goal, modify goal, create report, refuse to answer,...
+
+- Definition of params for each function call
+    - 
     
+
+## App specification - condensed:
+
 
 ## The tech stack:
 
-- aiogran for communication with telegram
+- aiogram for communication with telegram
 - Instructor -> force LLM to output structured json
 - database: json
 - scheduling: APScheduler
