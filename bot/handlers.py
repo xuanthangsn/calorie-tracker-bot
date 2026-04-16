@@ -15,7 +15,17 @@ from jinja2 import Environment, FileSystemLoader
 import config
 from bot.food_lookup import resolve_meal_items
 from bot.fsm_states import TrackerStates
-from bot.parser import Action, MealItem, parse_user_message
+from bot.action import (
+    Action,
+    AskClarificationAction,
+    DeleteMealAction,
+    EditMealAction,
+    GetReportAction,
+    LogMealAction,
+    RefuseAction,
+    SetGoalAction,
+)
+from bot.parser import parse_user_message
 from bot.reports import render_report_by_kind
 from bot.storage import JsonStorage
 from utils.context_builder import build_compact_context, record_parsed_action
@@ -39,43 +49,31 @@ def _render_response(name: str, **ctx: Any) -> str:
     return tpl.render(**ctx).strip()
 
 
-def _action_to_dict(a: Action) -> dict[str, Any]:
-    return {
-        "action": a.action,
-        "data": a.data,
-        "target_meal_id": a.target_meal_id,
-        "clarification_question": a.clarification_question,
-    }
+def _action_to_dict(wrapped: Action) -> dict[str, Any]:
+    return wrapped.model_dump(mode="json")
 
 
-async def _execute_action(message: Message, action: Action, storage: JsonStorage) -> str:
-    if action.action == "refuse":
+async def _execute_action(message: Message, wrapped: Action, storage: JsonStorage) -> str:
+    a = wrapped.root
+
+    if isinstance(a, RefuseAction):
         return _render_response("refuse")
 
-    if action.action == "ask_clarification":
-        q = action.clarification_question or "Which meal or date?"
-        return _render_response("clarification", question=q)
+    if isinstance(a, AskClarificationAction):
+        return _render_response("clarification", question=a.clarification_question)
 
-    if action.action == "get_report":
-        data = action.data or {}
-        kind = (
-            data.get("report")
-            or data.get("period")
-            or data.get("kind")
-            or "daily"
-        )
-        text = render_report_by_kind(str(kind), storage)
+    if isinstance(a, GetReportAction):
+        text = render_report_by_kind(a.period, storage)
         return _render_response("report", report_text=text)
 
-    if action.action == "set_goal":
-        data = action.data or {}
-        updates = {}
-        for k in ("daily", "weekly", "monthly"):
-            if k in data and data[k] is not None:
-                try:
-                    updates[k] = int(data[k])
-                except (TypeError, ValueError):
-                    pass
+    if isinstance(a, SetGoalAction):
+        updates: dict[str, int] = {}
+        if a.daily is not None:
+            updates["daily"] = a.daily
+        if a.weekly is not None:
+            updates["weekly"] = a.weekly
+        if a.monthly is not None:
+            updates["monthly"] = a.monthly
         if not updates:
             return _render_response(
                 "clarification",
@@ -85,48 +83,28 @@ async def _execute_action(message: Message, action: Action, storage: JsonStorage
         g = storage.get_goals()
         return _render_response(
             "report",
-            report_text=f"Goals: daily {g.get('daily')}, weekly {g.get('weekly')}, monthly {g.get('monthly')}.",
+            report_text=(
+                f"Goals: daily {g.get('daily')}, weekly {g.get('weekly')}, "
+                f"monthly {g.get('monthly')}."
+            ),
         )
 
-    if action.action == "delete_meal":
-        lid = action.target_meal_id
-        if lid is None:
-            return _render_response(
-                "clarification",
-                question="Which log ID should I delete?",
-            )
+    if isinstance(a, DeleteMealAction):
+        lid = a.target_meal_id
         ok = storage.delete_log(int(lid))
         if not ok:
-            return _render_response(
-                "report",
-                report_text=f"No log #{lid}.",
-            )
+            return _render_response("report", report_text=f"No log #{lid}.")
         return _render_response("report", report_text=f"Deleted log #{lid}.")
 
-    if action.action == "edit_meal":
-        lid = action.target_meal_id
-        if lid is None:
-            return _render_response(
-                "clarification",
-                question="Which log ID should I edit?",
-            )
-        data = action.data or {}
+    if isinstance(a, EditMealAction):
+        lid = a.target_meal_id
         patch: dict[str, Any] = {}
-        if "meal_type" in data:
-            patch["meal_type"] = data["meal_type"]
-        if "date" in data:
-            patch["date"] = str(data["date"])
-        if "items" in data and data["items"]:
-            raw_items = [
-                MealItem(
-                    food=str(i.get("food", "")),
-                    quantity=str(i.get("quantity", "100 g")),
-                    calories=i.get("calories"),
-                )
-                for i in data["items"]
-                if i.get("food")
-            ]
-            resolved = resolve_meal_items(raw_items, storage)
+        if a.meal_type is not None:
+            patch["meal_type"] = a.meal_type
+        if a.date is not None:
+            patch["date"] = a.date
+        if a.items:
+            resolved = resolve_meal_items(list(a.items), storage)
             patch["items"] = [m.model_dump() for m in resolved]
             patch["total_calories"] = sum(m.calories or 0 for m in resolved)
         if not patch:
@@ -143,35 +121,18 @@ async def _execute_action(message: Message, action: Action, storage: JsonStorage
             total=int(updated.get("total_calories", 0)),
         )
 
-    if action.action == "log_meal":
-        data = action.data or {}
-        meal_type = str(data.get("meal_type", "meal"))
-        d = str(data.get("date") or today_local().isoformat())
-        raw_items = data.get("items") or []
-        if not raw_items:
+    if isinstance(a, LogMealAction):
+        d = a.date or today_local().isoformat()
+        if not a.items:
             return _render_response(
                 "clarification",
                 question="What foods and amounts?",
             )
-        items = [
-            MealItem(
-                food=str(i.get("food", "")),
-                quantity=str(i.get("quantity", "100 g")),
-                calories=i.get("calories"),
-            )
-            for i in raw_items
-            if i.get("food")
-        ]
-        if not items:
-            return _render_response(
-                "clarification",
-                question="What foods and amounts?",
-            )
-        resolved = resolve_meal_items(items, storage)
+        resolved = resolve_meal_items(list(a.items), storage)
         total = sum(m.calories or 0 for m in resolved)
         entry = {
             "date": d,
-            "meal_type": meal_type,
+            "meal_type": a.meal_type,
             "items": [m.model_dump() for m in resolved],
             "total_calories": total,
             "timestamp": now_local_iso(),
@@ -179,7 +140,7 @@ async def _execute_action(message: Message, action: Action, storage: JsonStorage
         saved = storage.add_log(entry)
         return _render_response(
             "logged",
-            meal_type=meal_type,
+            meal_type=a.meal_type,
             date=d,
             total=total,
             log_id=saved["id"],
@@ -213,35 +174,31 @@ async def on_text(message: Message, state: FSMContext) -> None:
     st = await state.get_state()
     user_text = message.text.strip()
 
-    # if st == TrackerStates.awaiting_clarification.state:
-    #     data = await state.get_data()
-    #     pending = data.get("pending_action")
-    #     if pending:
-    #         user_text = (
-    #             f"Pending action (JSON): {json.dumps(pending, ensure_ascii=False)}\n"
-    #             f"User follow-up: {user_text}"
-    #         )
-    #     await state.set_state(TrackerStates.default)
-    #     await state.update_data(pending_action=None)
+    if st == TrackerStates.awaiting_clarification.state:
+        data = await state.get_data()
+        pending = data.get("pending_action")
+        if pending:
+            user_text = (
+                f"Pending action (JSON): {json.dumps(pending, ensure_ascii=False)}\n"
+                f"User follow-up: {user_text}"
+            )
+        await state.set_state(TrackerStates.default)
+        await state.update_data(pending_action=None)
 
     ctx = build_compact_context(uid, storage)
     try:
-        resp, llm_request_str = parse_user_message(user_text, ctx)
+        parsed, llm_request_str = parse_user_message(user_text, ctx)
     except Exception as e:
         log.exception("parse failed: %s", e)
-        # await message.answer(_render_response("clarification", question="Repeat that?"))
         await message.answer("There was an error parsing your message. Please try again.")
         return
 
-    resp = str(resp)
-    
-    print(f"LLM Request: \n{llm_request_str}")
-    print(f"LLM Response: \n{resp}")
-    # record_parsed_action(uid, _action_to_dict(action))
+    log.debug("LLM request trace: %s", llm_request_str)
+    record_parsed_action(uid, _action_to_dict(parsed))
 
-    # if action.action == "ask_clarification":
-    #     await state.set_state(TrackerStates.awaiting_clarification)
-    #     await state.update_data(pending_action=_action_to_dict(action))
+    if isinstance(parsed.root, AskClarificationAction):
+        await state.set_state(TrackerStates.awaiting_clarification)
+        await state.update_data(pending_action=_action_to_dict(parsed))
 
-    # reply = await _execute_action(message, action, storage)
-    await message.answer(resp)
+    reply = await _execute_action(message, parsed, storage)
+    await message.answer(reply)

@@ -28,11 +28,13 @@ TELEGRAM_CHAT_ID: int | None = _optional_int("TELEGRAM_CHAT_ID")
 
 OLLAMA_BASE_URL: str = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
 OPENAI_API_KEY: str | None = os.getenv("OPENAI_API_KEY") or None
-GEMINI_API_KEY: str | None = os.getenv("GEMINI_API_KEY") or None
-USDA_API_KEY: str | None = os.getenv("USDA_API_KEY") or None
+# google.genai (Gemini) — either name works
+GEMINI_API_KEY: str | None = (
+    os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or None
+)
+GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
 
-# LiteLLM model: e.g. ollama/llama3.2, gpt-4o-mini
-LLM_MODEL: str = os.getenv("LLM_MODEL", "ollama/llama3.2")
+USDA_API_KEY: str | None = os.getenv("USDA_API_KEY") or None
 
 # Timezone for reports / log dates (IANA name)
 TZ_NAME: str = os.getenv("TZ", "UTC")
