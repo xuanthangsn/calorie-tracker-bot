@@ -1,4 +1,4 @@
-"""Bot startup: polling + scheduler."""
+"""Bot startup with Telegram polling."""
 from __future__ import annotations
 
 import asyncio
@@ -8,11 +8,9 @@ import sys
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
-from aiogram.fsm.storage.memory import MemoryStorage
 
 import config
 from bot.handlers import router
-from scheduler import setup_scheduler
 
 
 async def main() -> None:
@@ -29,17 +27,9 @@ async def main() -> None:
         config.TELEGRAM_TOKEN,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
     )
-    dp = Dispatcher(storage=MemoryStorage())
+    dp = Dispatcher()
     dp.include_router(router)
-
-    # setup scheduler
-    sched = setup_scheduler(bot)
-    sched.start()
-
-    try:
-        await dp.start_polling(bot)
-    finally:
-        sched.shutdown(wait=False)
+    await dp.start_polling(bot)
 
 
 if __name__ == "__main__":
