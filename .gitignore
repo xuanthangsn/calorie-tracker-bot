@@ -37,7 +37,3 @@ htmlcov/
 *.swp
 *.swo
 *~
-
-# App data (local DB)
-data/calorie_data.json
-data/calorie_data.json.bak

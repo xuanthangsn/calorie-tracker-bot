@@ -3,20 +3,20 @@
 This module defines an OOP base class that concrete actions can extend.
 It follows the high-level contract from `agent_system_design.md`:
 
-- Action has a `name` and `params`
+- Action has a `name` and `params` (ActionParam)
 - Action exposes `execute()` and returns a string result
 
 It also adds a practical execution lifecycle:
-- input validation
 - optional pre/post hooks
 - consistent error handling
-- helpers for parsing structured LLM action payloads
 """
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 from typing import Any, Mapping
+from agent.action_param import ActionParam 
+
 
 
 def _utc_now_iso() -> str:
@@ -37,7 +37,7 @@ class BaseAction(ABC):
 
     Subclasses should:
     - define a unique `name`
-    - implement _execute_impl, validate
+    - implement _execute_impl, validate_param
     - optionally override  `before_execute()`, `after_execute()`
     """
 
@@ -45,12 +45,14 @@ class BaseAction(ABC):
 
     def __init__(
         self,
-        params: Mapping[str, Any] | None = None,
+        params: ActionParam,
     ) -> None:
-        self.params: dict[str, Any] = dict(params or {})
+
+        self.params = params
         self.created_at: str = _utc_now_iso()
         self._result: str | None = None
         self._last_error: str | None = None
+   
 
     @property
     def result(self) -> str | None:
@@ -63,7 +65,7 @@ class BaseAction(ABC):
         return self._last_error
 
     @abstractmethod
-    def validate(self) -> None:
+    def validate_param(self) -> None:
         """
         Validate action parameters.
         """
@@ -110,44 +112,9 @@ class BaseAction(ABC):
         """Serialize action state for logs/traces."""
         return {
             "name": self.name,
-            "params": self.params,
+            "params": self.params.to_dict(),
             "created_at": self.created_at,
             "result": self._result,
             "last_error": self._last_error,
         }
-
-    @classmethod
-    def from_llm_action_json(
-        cls,
-        payload: Mapping[str, Any],
-    ) -> BaseAction:
-        """Create a base action object from the LLM `action` payload.
-
-        Expected minimal shape:
-            {
-                "name": "<action_name>",
-                "params": { ... }
-            }
-
-        This method intentionally returns an anonymous BaseAction subclass,
-        which is useful as a neutral fallback before introducing an Action factory.
-        """
-        name = str(payload.get("name", "")).strip()
-        params = payload.get("params", {})
-        if not name:
-            raise ActionValidationError("LLM action payload is missing 'name'")
-        if params is None:
-            params = {}
-        if not isinstance(params, Mapping):
-            raise ActionValidationError("'params' must be an object/dictionary")
-
-        class _AnonymousAction(BaseAction):
-            def _execute_impl(self) -> str:
-                return (
-                    f"Action '{self.name}' is parsed but has no concrete implementation yet."
-                )
-
-        obj = _AnonymousAction(params=dict(params))
-        obj.name = name
-        return obj
 
