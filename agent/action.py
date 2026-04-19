@@ -37,7 +37,7 @@ class BaseAction(ABC):
 
     Subclasses should:
     - define a unique `name`
-    - implement _execute_impl, validate_param
+    - implement _execute_impl, _validate_param
     - optionally override  `before_execute()`, `after_execute()`
     """
 
@@ -65,7 +65,7 @@ class BaseAction(ABC):
         return self._last_error
 
     @abstractmethod
-    def validate_param(self) -> None:
+    def _validate_param(self) -> None:
         """
         Validate action parameters.
         """
