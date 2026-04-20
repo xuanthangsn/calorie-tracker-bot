@@ -70,6 +70,10 @@ class BaseAction(ABC):
         Validate action parameters.
         """
      
+    def validate(self) -> None:
+        """Public validation entrypoint for execution lifecycle."""
+        self._validate_param()
+
 
     def before_execute(self) -> None:
         """Optional hook called before execution."""
