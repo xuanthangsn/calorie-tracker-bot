@@ -4,8 +4,6 @@
 - A **Task** will encapsulate all the state, the interaction so far with LLM to perform the current task, and perform the ReAct loop (parsing LLM response, initializing corresponding **Action**, execute it, sending the result back to LLM, and repeat)
 
 
----
-
 ## Class: `Task`
 
 **Core properties (conceptual)**
@@ -22,7 +20,7 @@
 | `actions` | list of action taken so far |
 | `error` | Terminal error info when `failed` (optional). |
 
-**Abstract / required behaviors**
+**Abstract / required behaviors (conceptual)**
 
 | Method | Purpose |
 |--------|--------|
@@ -34,11 +32,7 @@
 
 **Edge case**
 
-- force the Task to be cancelled when the cycle_index exceed the max_cycle
-- 
-
-
-
+- force the Task to be cancelled when the cycle_index exceed the max_cycle, in such case, the status of the task will be 'failed'
 
 
 **Error model**
