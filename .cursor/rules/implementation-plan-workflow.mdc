@@ -1,0 +1,27 @@
+---
+description: Require design docs and implementation plans before any code changes
+alwaysApply: true
+---
+
+# Implementation plan workflow
+
+## Read design docs first
+
+Before **architectural changes**, **new features**, or **refactoring**, you **MUST**:
+
+1. Read `./implementation_plan/agent_system_design.md` for system architecture.
+2. Read **other relevant** `./implementation_plan/*.md` files for the components involved (actions, tasks, LLM envelope, etc.).
+
+If work would contradict those documents, **stop**, warn the user, and resolve the discrepancy (including proposing updates to the plan and getting approval when the high-level design must change).
+
+## No code without a documented plan
+
+The `./implementation` directory holds per-component **architectural and implementation plans** (Markdown). You are **forbidden** from writing or modifying application **code** without an up-to-date documented plan.
+
+Before **any** code change:
+
+1. **Analyze** — Review existing `.md` files under `./implementation` for the relevant component(s).
+2. **Draft/update** — Edit the existing plan or add a new `.md` for new components.
+3. **Get approval** — Present the plan change to the user and obtain **explicit approval** before editing non-plan source files.
+
+Token-optimized checklist: design doc → related `implementation_plan` → `implementation` plan → user OK → then code.
