@@ -5,7 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from agent.action import ActionError, ActionValidationError, BaseAction
 from agent.action_param import ActionParam
-from agent.path_permission_policy import PathPermissionError, PathPermissionPolicy
+from utils.path_resolution import InvalidLLMRequestedPath, resolve_workspace_path
 
 
 class ReadParamsModel(BaseModel):
@@ -23,10 +23,8 @@ class ReadAction(BaseAction):
     def __init__(
         self,
         params: ActionParam,
-        permission_policy: PathPermissionPolicy | None = None,
     ) -> None:
         super().__init__(params)
-        self._permission_policy = permission_policy or PathPermissionPolicy.from_cwd()
         self._validated_params: ReadParamsModel | None = None
 
     def _validate_param(self) -> None:
@@ -41,10 +39,10 @@ class ReadAction(BaseAction):
             raise ActionError("read params must be validated before execution")
         requested_path = self._validated_params.path
         try:
-            safe_path = self._permission_policy.authorize("read", requested_path)
+            safe_path = resolve_workspace_path(requested_path)
             return safe_path.read_text(encoding="utf-8")
-        except PathPermissionError as exc:
-            raise ActionError(str(exc)) from exc
+        except InvalidLLMRequestedPath as exc:
+            raise ActionError(f"the requested read file path is invalid: '{requested_path}'") from exc
         except FileNotFoundError as exc:
             raise ActionError(f"read failed: file not found: '{requested_path}'") from exc
         except IsADirectoryError as exc:

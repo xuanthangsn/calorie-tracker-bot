@@ -5,7 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from agent.action import ActionError, ActionValidationError, BaseAction
 from agent.action_param import ActionParam
-from agent.path_permission_policy import PathPermissionError, PathPermissionPolicy
+from utils.path_resolution import InvalidLLMRequestedPath, resolve_workspace_path
 
 
 class WriteParamsModel(BaseModel):
@@ -24,10 +24,8 @@ class WriteAction(BaseAction):
     def __init__(
         self,
         params: ActionParam,
-        permission_policy: PathPermissionPolicy | None = None,
     ) -> None:
         super().__init__(params)
-        self._permission_policy = permission_policy or PathPermissionPolicy.from_cwd()
         self._validated_params: WriteParamsModel | None = None
 
     def _validate_param(self) -> None:
@@ -43,12 +41,12 @@ class WriteAction(BaseAction):
         requested_path = self._validated_params.path
         content = self._validated_params.content
         try:
-            safe_path = self._permission_policy.authorize("write", requested_path)
+            safe_path = resolve_workspace_path(requested_path)
             safe_path.parent.mkdir(parents=True, exist_ok=True)
             safe_path.write_text(content, encoding="utf-8")
             return f"write success: {safe_path}"
-        except PathPermissionError as exc:
-            raise ActionError(str(exc)) from exc
+        except InvalidLLMRequestedPath as exc:
+            raise ActionError(f"the requested write file path is invalid: '{requested_path}'") from exc
         except IsADirectoryError as exc:
             raise ActionError(f"write failed: path is a directory: '{requested_path}'") from exc
         except OSError as exc:
