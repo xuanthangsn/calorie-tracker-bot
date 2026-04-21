@@ -76,31 +76,17 @@ Concrete actions under `BaseAction`; `params` is the object inside `ActionParam`
 
 ---
 
-## Permission architecture for `read` / `write`
+## Workspace path resolution utility for `read` / `write` action
 
-Strict filesystem permission must be enforced by a dedicated guard layer (not by LLM prompt behavior).
+- follow the "agent workspace" or LLM sandbox envinronment proposed in `agent_system_design.md`, create a utility function that resolve the requested read/write file path from LLM to the real system file path
+- treat the requested read/write file path from LLM as always relative the the `$memory_root` (a env variable defined by user) folder, therefore resolve it under `$memory_root`
 
-1. **Single policy source** — Define one `PathPermissionPolicy` config loaded at app startup:
-   - `memory_root = <cwd>/memory` (resolved absolute path).
-   - `read_allow_roots = [memory_root]`.
-   - `write_allow_roots = [memory_root]`.
-   - no other filesystem roots are allowed.
+- enforce the following rules:
+   - normalized/canonical path resolution (`realpath` semantics),
+   - no traversal/symlink escape outside `$memory_root`,
+   - fail fast with `ActionError` if resolved path is outside `$memory_root`.
 
-2. **Canonical path check** — Before any I/O:
-   - normalize and resolve (`realpath`) the requested `path`,
-   - reject path traversal and symlink-escape attempts,
-   - allow only when resolved path is inside `memory_root`.
-
-3. **Action guard flow** — In `_execute_impl` for `ReadAction` and `WriteAction`:
-   - call a shared permission service (e.g. `PermissionGuard.authorize(operation, path)`),
-   - on denial, raise `ActionError` with a safe message (`permission denied for read/write path`),
-   - never bypass this guard from action code.
-
-4. **Write/create behavior in `memory` only** — `write` may create a new file if it does not exist, but only under `memory_root`; parent directories may be created only inside `memory_root`.
-
-5. **Default-deny + minimal surface** — If requested path is outside `memory_root`, deny by default. Keep `params` minimal (`path`, `content`) and keep permission rules outside LLM-controlled fields.
-
-6. **Auditability** — Log allow/deny decisions with action name, normalized path, decision reason, and task id (no sensitive file content in logs).
+- Error model: create InvalidLLMRequestedPath error model, throw if the requested path violate these above rules
 
 ---
 
