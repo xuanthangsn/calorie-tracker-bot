@@ -1,4 +1,4 @@
-# LLM response — action-centric envelope (alternative strategy)
+# LLM response — action-centric envelope
 
 This document describes an **alternative** structured-response shape for ReAct turns. It does **not** replace `llm_react_response.md`; that file remains the reference for the `thought` + nested `action` envelope. Action names and param semantics for concrete tools still follow **`implemented_actions.md`**.
 
@@ -32,7 +32,7 @@ Illustrative JSON:
 ### Layer 1 — Schemas in the prompt
 
 - Inject into **system/developer** context the **full JSON contract** for each action the model must satisfy:
-- another approach is using tool calling api of google-genai
+- another approach is using tool calling api of google-genai (second option, not employed for now)
 
 ### Layer 2 — Retry + remind (ReAct)
 
@@ -49,10 +49,51 @@ Illustrative JSON:
 3. Build **`ActionParam(params)`** and construct the matching action; **`thought`** is not part of `ActionParam` — use it for logging/trace only and serve as context for the text ReAct cycle.
 4. Execute; feed result + context into the next cycle unless `final_answer` completes the task.
 
+## How to inject the current task context to each request
+- task context is the context of past ReAct cycles of current task: **LLM reasoning + Tool call + Observation**
+- this can be treated as conversational history between LLM and user
+- inject this using the built-in conversatinal history capability of google-genai, for example:
+```code
+chat_history = [
+    {"role": "user", "parts": [{"text": "Read the user.md file."}]},
+    {"role": "model", "parts": [{"text": '{"action": "read", ...}'}]},
+    {"role": "user", "parts": [{"text": "OBSERVATION: ..."}]}
+]
 
+response = client.models.generate_content(
+    model='gemini-3-flash-preview',
+    contents=chat_history,
+    config=types.GenerateContentConfig(
+        system_instruction=system_prompt_text, # <--- Injected here
+        response_mime_type="application/json",
+        temperature=0.0
+    )
+)
+```
+- format of observation (or tool calling output) before injecting to chat history:
+```text
+OBSERVATION: 
+{
+  "tool_executed": "read",
+  "status": "success,
+  "output": "..."
+}
+```
+- format of LLM reasoning + tool selection before injecting to chat history: literal json response that LLM return from previous ReAct cycle
+```text
+{
+  "action": "read",
+  "thought": "Since 'user.md' was not found, I will check 'task_history.md' to see if the user's favorite hobby was mentioned in previous interactions.",
+  "params": {
+    "path": "task_history.md"
+  }
+}
+```
 
 
 ## System prompt strategy
+
+I have tested and this prompt seem to f**king work, brooo!!!
 
 ```text
 You are an autonomous, logical AI assistant capable of solving complex problems by using tools. You operate in a continuous Thought -> Action -> Observation loop. 
