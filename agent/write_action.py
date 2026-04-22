@@ -44,7 +44,7 @@ class WriteAction(BaseAction):
             safe_path = resolve_workspace_path(requested_path)
             safe_path.parent.mkdir(parents=True, exist_ok=True)
             safe_path.write_text(content, encoding="utf-8")
-            return f"write success: {safe_path}"
+            return content
         except InvalidLLMRequestedPath as exc:
             raise ActionError(f"the requested write file path is invalid: '{requested_path}'") from exc
         except IsADirectoryError as exc:
