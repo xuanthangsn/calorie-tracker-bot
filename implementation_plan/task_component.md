@@ -20,7 +20,7 @@
 | `actions` | list of action taken so far |
 | `error` | Terminal error info when `failed` (optional). |
 
-**Abstract / required behaviors (conceptual)**
+**Behaviors (conceptual)**
 
 | Method | Purpose |
 |--------|--------|
@@ -28,7 +28,6 @@
 | `to_dict` | snapshot for logging/tracing (id, status, cycle counts, timestamps, no huge payloads unless configured). |
 | `force_stop` | forcefully stop the task |
 | `basic getter` | basic getter for current task state |
-
 
 **Edge case**
 

@@ -80,13 +80,9 @@ Concrete actions under `BaseAction`; `params` is the object inside `ActionParam`
 
 - follow the "agent workspace" or LLM sandbox envinronment proposed in `agent_system_design.md`, create a utility function that resolve the requested read/write file path from LLM to the real system file path
 - treat the requested read/write file path from LLM as always relative the the `$memory_root` (a env variable defined by user) folder, therefore resolve it under `$memory_root`
+- the requested file for read/write action from LLM must be file name only, do not allow file nested inside another folder, if it contains character that try to escape to its relative parent folder, throw the error immediately
 
-- enforce the following rules:
-   - normalized/canonical path resolution (`realpath` semantics),
-   - no traversal/symlink escape outside `$memory_root`,
-   - fail fast with `ActionError` if resolved path is outside `$memory_root`.
-
-- Error model: create InvalidLLMRequestedPath error model, throw if the requested path violate these above rules
+- Error model: create InvalidLLMRequestedPath error model, throw if the requested path violate these above rule
 
 ---
 

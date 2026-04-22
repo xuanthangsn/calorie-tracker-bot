@@ -27,7 +27,9 @@
 - The LLM workspace is the folder defined by env variable `$memory_root`.
 - For file actions (`read`, `write`), the app treats every path from LLM as **relative to the LLM workspace**.
 - LLM can read and write any file **inside** this workspace
-- The app may create missing files/directories under `./{$memory_root}` when needed by `write`.
-- This host filesystem detail is hidden from LLM:
+- The app may create missing files/directories under `$memory_root` when needed by `write`.
+- This host filesystem detail is hidden from LLM.
 - Purpose: give LLM a controlled persistent memory area while keeping strict filesystem isolation from the host project environment.
+- the `$memory_root` env, can be a path relative to current working directory of the app or an absolute path, the `utils/path_resolution.py` need to handle both case gracefully
+- make sure the requested file for read/write action from LLM is a file name only
 
