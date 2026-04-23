@@ -5,6 +5,7 @@ import json
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Callable
 
 import config
@@ -15,24 +16,30 @@ from agent.action_param import ActionParam
 from agent.final_answer_action import FinalAnswerAction
 from agent.read_action import ReadAction
 from agent.write_action import WriteAction
-
-try:
-    from google import genai
-    from google.genai import types
-except ImportError:  # pragma: no cover - runtime dependency guard
-    genai = None
-    types = None
+from google import genai
+from google.genai import types
 
 
 def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _get_system_prompt() -> str:
+    prompt_path = Path("prompts/system_prompt.md")
+    try:
+        prompt_text = prompt_path.read_text(encoding="utf-8").strip()
+    except OSError as exc:
+        raise TaskError(f"failed to load system prompt file '{prompt_path}': {exc}") from exc
+    if not prompt_text:
+        raise TaskError(f"system prompt file is empty: '{prompt_path}'")
+    return prompt_text
+
+
 class TaskError(RuntimeError):
     """Raised for Task-level failures in orchestration or lifecycle."""
 
 
-class _ActionCentricResponse(BaseModel):
+class LLMResponse(BaseModel):
     """Strict action-centric response envelope from LLM."""
 
     model_config = ConfigDict(extra="forbid")
@@ -59,33 +66,18 @@ class _Observation:
 class Task:
     """One user-originated run with bounded ReAct cycles."""
 
-    DEFAULT_SYSTEM_PROMPT = """You are an autonomous, logical AI assistant capable of solving problems using tools.
-You operate in a Thought -> Action -> Observation loop.
-Choose exactly one action each turn and return ONLY valid JSON:
-{
-  "action": "read|write|final_answer",
-  "thought": "why this action",
-  "params": { ... }
-}
-Rules:
-- No markdown, no extra keys.
-- read params: {"path": "non-empty string"}
-- write params: {"path": "non-empty string", "content": "string"}
-- final_answer params: {"message": "non-empty string"}
-- If previous observation reports validation error, correct it in this turn.
-"""
-
     ACTION_REGISTRY: dict[str, Callable[[ActionParam], BaseAction]] = {
         "read": ReadAction,
         "write": WriteAction,
         "final_answer": FinalAnswerAction,
     }
 
+    SYSTEM_PROMPT = _get_system_prompt()
+
     def __init__(
         self,
         user_request: str,
         max_cycle: int = 8,
-        system_prompt: str | None = None,
         model_name: str = "gemini-3-flash-preview",
     ) -> None:
         if not isinstance(user_request, str) or not user_request.strip():
@@ -108,15 +100,14 @@ Rules:
         self.started_at: str | None = None
         self.finished_at: str | None = None
         self._stop_requested: bool = False
-        self._system_prompt = system_prompt or self.DEFAULT_SYSTEM_PROMPT
         self._model_name = model_name
-        self._client = self._build_llm_client()
+
+        try:
+            self._client = self._build_llm_client()
+        except Exception as exc:
+            raise TaskError(f"failed to build LLM client: {exc}") from exc
 
     def _build_llm_client(self) -> Any:
-        if genai is None or types is None:
-            raise TaskError("google-genai is not installed")
-        if not config.GEMINI_API_KEY:
-            raise TaskError("GEMINI_API_KEY is required")
         return genai.Client(api_key=config.GEMINI_API_KEY)
 
     def execute(self) -> str:
@@ -186,12 +177,11 @@ Rules:
         raise TaskError(self.error or "task failed")
 
     def _call_llm(self) -> str:
-        assert types is not None
         response = self._client.models.generate_content(
             model=self._model_name,
             contents=self.task_context,
             config=types.GenerateContentConfig(
-                system_instruction=self._system_prompt,
+                system_instruction=SYSTEM_PROMPT,
                 response_mime_type="application/json",
                 temperature=0.0,
             ),
@@ -201,17 +191,17 @@ Rules:
             raise TaskError("empty response from LLM")
         return text
 
-    def _parse_llm_response(self, raw_text: str) -> _ActionCentricResponse:
+    def _parse_llm_response(self, raw_text: str) -> LLMResponse:
         try:
             payload = json.loads(raw_text)
         except json.JSONDecodeError as exc:
             raise TaskError(f"invalid JSON response from LLM: {exc}") from exc
         try:
-            parsed = _ActionCentricResponse.model_validate(payload)
+            parsed = LLMResponse.model_validate(payload)
         except ValidationError as exc:
-            raise TaskError(f"invalid action-centric envelope: {exc}") from exc
+            raise TaskError(f"invalid LLM response: {exc}") from exc
         if not isinstance(parsed.params, dict):
-            raise TaskError("invalid action-centric envelope: params must be object")
+            raise TaskError("invalid LLM response: params must be object")
         return parsed
 
     def _append_observation(self, observation: _Observation) -> None:

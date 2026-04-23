@@ -1,155 +1,143 @@
-# LLM response envelope — ReAct cycle
+# LLM response
 
-Models the **expected LLM output on every turn** inside the Task ReAct loop (design: *LLM reasoning* step). The client parses this JSON, builds the matching **Action**, runs it, and feeds the observation back until a terminal action ends the task.
-
----
+This document describes an structured-response shape for ReAct turns.
 
 ## Top-level shape (strict)
 
-Two keys only; no other top-level fields.
+Exactly three top-level keys: `action`, `thought`, `params`. No other top-level fields.
 
 | Field | Type | Purpose |
 |--------|------|---------|
-| `thought` | string | Reasoning in response to the latest client message (user request + prior observations / `task_context`). |
-| `action` | object | What to run this cycle; maps to `BaseAction`: `name` + `params` inside `ActionParam`. |
+| `action` | string | name of the chosen action |
+| `thought` | string | reasoning for choosing this action |
+| `params` | object | param of the action |
 
 Illustrative JSON:
 
 ```json
 {
-  "thought": "…",
-  "action": {
-    "name": "<registered_action_name>",
-    "params": { }
+  "action": "<action_name>",
+  "thought": "<reason for choosing this action>",
+  "params": { }
+}
+```
+
+- **`params` per action** must match the schemas documented under **`read`**, **`write`**, and **`final_answer`** in **implemented_actions.md**
+---
+
+## Two layers of enforcement
+
+### Layer 1 — Schemas in the prompt
+
+- Inject into **system/developer** context the **full JSON contract** for each action the model must satisfy:
+- another approach is using tool calling api of google-genai (second option, not employed for now)
+
+### Layer 2 — Retry + remind (ReAct)
+
+- On **`ActionValidationError`**, append an **observation** to the next client message: what failed, which field, expected shape (short, safe text).
+- **Remind** the model of the correct `params` schema for the action it chose (or allow switching `action` if appropriate).
+- **Bounded retries** at the Task level (finite `max_cycle`); no infinite same-turn loops.
+
+---
+
+## Runtime parsing (conceptual)
+
+1. Parse JSON; ensure exactly `action`, `thought`, `params`.
+2. Resolve `action` against the **registry**; unknown name → Task-level error (or terminal failure per product rules).
+3. Build **`ActionParam(params)`** and construct the matching action; **`thought`** is not part of `ActionParam` — use it for logging/trace only and serve as context for the text ReAct cycle.
+4. Execute; feed result + context into the next cycle unless `final_answer` completes the task.
+
+## How to inject the current task context to each request
+- task context is the context of past ReAct cycles of current task: **LLM reasoning + Tool call + Observation**
+- this can be treated as conversational history between LLM and user
+- inject this using the built-in conversatinal history capability of google-genai, for example:
+```code
+chat_history = [
+    {"role": "user", "parts": [{"text": "Read the user.md file."}]},
+    {"role": "model", "parts": [{"text": '{"action": "read", ...}'}]},
+    {"role": "user", "parts": [{"text": "OBSERVATION: ..."}]}
+]
+
+response = client.models.generate_content(
+    model='gemini-3-flash-preview',
+    contents=chat_history,
+    config=types.GenerateContentConfig(
+        system_instruction=system_prompt_text, # <--- Injected here
+        response_mime_type="application/json",
+        temperature=0.0
+    )
+)
+```
+- format of observation (or tool calling output) before injecting to chat history:
+```text
+OBSERVATION: 
+{
+  "tool_executed": "read",
+  "status": "success,
+  "output": "..."
+}
+```
+- format of LLM reasoning + tool selection before injecting to chat history: literal json response that LLM return from previous ReAct cycle
+```text
+{
+  "action": "read",
+  "thought": "Since 'user.md' was not found, I will check 'task_history.md' to see if the user's favorite hobby was mentioned in previous interactions.",
+  "params": {
+    "path": "task_history.md"
   }
 }
 ```
 
----
 
-## `action` object
+## System prompt strategy
 
-| Field | Type | Purpose |
-|--------|------|---------|
-| `name` | string | Action identifier; must match a registered concrete action (e.g. tool or domain action). |
-| `params` | object | Raw payload for that action; validated by `validate_param` → `ActionValidationError` if invalid. |
-
-- `params` is the object stored in **`ActionParam`** (see **action_param.md**).
-- Each concrete action defines its own required keys and types under `params`.
-
----
-
-## Terminal cycle (task finished)
-
-The envelope does **not** change. Completion is indicated by choosing the **`name` / `params`** pair that the runtime defines as **final reply** (e.g. send user-visible text and stop the loop). The Task then sets **`final_response`**, **`status: completed`**, and does not start another LLM cycle—per **task_component.md** and **agent_system_design.md** step 6.
-
----
-
-## Errors (conceptual)
-
-| Failure | Typical handling |
-|---------|------------------|
-| Invalid JSON, missing `thought` or `action`, missing `action.name` | Parse / Task-level error before action construction. |
-| Unknown `action.name` | Task-level or dispatch error. |
-| `params` fails schema for that action | `ActionValidationError`. |
-| Execution failure | `ActionError` (or subclass); result still reported per ReAct step 4. |
-
----
-
-## Implementation Constraint
-
-- Use only gemini api as LLM provider
-- Use google-genai package to make API call
-- Use gemini-3-flash-preview for affordable cost, speed and intelligence
-
----
-
-## Enforcing structured output (implementation strategy)
-
-**Goal:** Every model turn must deserialize to the envelope above without ad-hoc string parsing.
-
-**3 layers of enforcement:**
-- **Layer 1. Enforce the LLM response generic structure**: 
-    - enforce only the **envelope** (`thought` + `action` with `name` + open `params`). 
-    - this is done by leveraging google-genai functionality for structured output (provide a schema at API calling)
-- **Layer 2: Enforce the structured params for each specific action in LLM response**:
-    - what goes *inside* `params` for each action is **not** modeled in one giant Gemini schema when making the API request; 
-    - we instruct the LLM how it should construct the params for a specifc action by giving concrete instruction in the prompt, give examples,...
-- **Layer 3: Enforce the structured params for a specific action in LLM response using retry in ReAct loop**
-    - when LLM makes mistake by responding an invalid params for an action, in the next ReAct cycle, the app will give LLM context about its past mistake, and told LLM to make the correction
-    
-
-
-**LLM structured output enforcement workflow:**
-
-1. **send API request to LLM with JSON schema enforcement for the only the envelop** 
-  - create a JSON schema (using pydantic model) for the structure of the envelop
-  - using google-genai api to enforce the structure of the response to follow the evelop json schema
-  -  Keep **`params` a generic object** in the API schema; do **not** fold every tool’s param shape into that schema (too large, brittle).
-
-2. **Parse and validate the response** 
-  - throw error and stop the current task if: the reponse does not conform the envelop schema; action is not found
-
-3. **Registry + `validate_param`** 
-  - resolve `action.name` against a **registry**. 
-  - try to initialize the action based on parsed param, if _validate_params failed, initiating new ReAct cycle indicating the errors to LLM, and ask it to return a correct response
-
-4. **How the LLM knows `params`** 
-  - supply a **tool catalog** in system/developer context: for each registered `name`, document required keys, types, and meaning (short table or mini JSON Schema per action). Prefer deriving or syncing this text from the specific action param schema defined in each action file, so there is **one source of truth** in code; the prompt is a **projection** for the model, not a second schema language. Optionally narrow what you inject when context allows (e.g. only a subset of actions).
-
-5. **ReAct closes semantic gaps** 
-  - wrong or incomplete `params` are normal. **`_validate_param`** failures become **observations** in the next cycle (“field X missing”, “invalid enum”, …). The model corrects `params` or changes `action.name` without unbounded blind retries on the same turn.
-
-
-**Stack in one line:** Gemini + `google-genai` enforce the **envelope**; the **registry**, **tool catalog in prompt**, and **`_validate_param` + ReAct** enforce correct **`params`** — aligned with **action_component.md** / **action_param.md**.
-
----
-
-## System prompt strategy 
+I have tested and this prompt seem to f**king work, brooo!!!
 
 ```text
 You are an autonomous, logical AI assistant capable of solving complex problems by using tools. You operate in a continuous Thought -> Action -> Observation loop. 
 You will be provided with the User's Original Request, and a history of your previous thoughts, actions, and the system's observations.
-Your task is to give out your thought on what to do next, and choose 1 tool from the provided list of tools
+Your task is to give out your thought on what to do next, and choose exactly 1 tool from the provided list of tools.
+Return your output as a JSON object strictly following the JSON SCHEMA defined for the tool that you choose.
+
+### KNOWLEDGE MAP & FILE SYSTEM
+You have access to a local file system to store and retrieve information. When you need specific context, consult the following file index to know which file to read or modify.
+- `user.md`: Read this file if you need to know about the user's information, preferences, or profile.
+- `task_history.md`: Read this file to understand previous tasks completed in past sessions.
+- `scratchpad.md`: Write to this file if you need a place to temporarily store intermediate calculations or notes.
 
 ### AVAILABLE TOOLS
-You have access to the following tools. You must choose exactly 1 tool:
 1. `read`: use this tool when you want to read something from the local file system
 2. `write`: use this tool when you want to write something to the local file system
 3. `final_answer`: use this tool when you want to formulate the final answer to user
 
-For each turn:
-1) Analyze the latest user request + prior observation.
-2) Write `thought` describing what you should do next.
-3) Choose exactly one action from the allowed action list.
-4) Build `action.params` that exactly matches that chosen action schema.
-5) If the task is finished, choose `final_answer`.
-
-You must return exactly one JSON object (no markdown, no code fences) that follows this schema:
+## JSON SCHEMA FOR EACH ACTION
+# Schema for `read`:
 {
-  "type": "object",
-  "additionalProperties": false,
-  "required": ["thought", "action"],
-  "properties": {
-    "thought": { "type": "string", "minLength": 1 },
-    "action": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["name", "params"],
-      "properties": {
-        "name": { "type": "string", "enum": ["read", "write", "final_answer"] },
-        "params": { "type": "object" }
-      }
-    }
+  "action": "read",
+  "thought": "string <your step-by-step reasoning for choosing this tool>",
+  "params": {
+    "path": "string <filesystem path to read, MUST be inside the `memory/` folder>"
   }
 }
 
-Allowed actions and params:
-- read: params = { path: non-empty string }
-- write: params = { path: non-empty string, content: string }
-- final_answer: params = { message: non-empty string }
+# Schema for `write`:
+{
+  "action": "write",
+  "thought": "string <your step-by-step reasoning for choosing this tool>",
+  "params": {
+    "path": "string <target file path>",
+    "content": "string <full text to write>"
+  }
+}
 
-# Action schema declaration
+# Schema for `final_answer`:
+{
+  "action": "final_answer",
+  "thought": "string <your step-by-step reasoning for choosing this tool>",
+  "params": {
+    "message": "string <final response text to send to the user>"
+  }
+}
 
 ### STRICT FORMATTING RULES
 1. You must respond ONLY with valid JSON.
@@ -157,10 +145,4 @@ Allowed actions and params:
 3. Do not wrap the JSON in markdown code blocks (e.g., ```json ... ```). Just return the raw JSON string.
 4. Ensure all keys are enclosed in double quotes.
 5. If a piece of information is missing from the text, use `null` instead of making something up.
-
-Rules:
-- Choose only one action per response.
-- Params must match the chosen action schema exactly (no extra keys).
-- Use final_answer only when the task is done, and put the final user-facing text in `params.message`.
-- If previous observation reports validation error, correct it in this turn.
 ```
