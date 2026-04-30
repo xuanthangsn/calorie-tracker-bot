@@ -13,6 +13,7 @@ class ReadParamsModel(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
     path: str = Field(min_length=1)
+    contains: str | None = Field(default=None, min_length=1)
 
 
 class ReadAction(BaseAction):
@@ -40,7 +41,16 @@ class ReadAction(BaseAction):
         requested_path = self._validated_params.path
         try:
             safe_path = resolve_workspace_path(requested_path)
-            return safe_path.read_text(encoding="utf-8")
+            content = safe_path.read_text(encoding="utf-8")
+            contains = self._validated_params.contains
+            if contains is None:
+                return content
+
+            matching_lines = []
+            for line in content.splitlines():
+                if contains in line:
+                    matching_lines.append(line)
+            return "\n".join(matching_lines)
         except InvalidLLMRequestedPath as exc:
             raise ActionError(f"the requested read file path is invalid: '{requested_path}'") from exc
         except FileNotFoundError as exc:

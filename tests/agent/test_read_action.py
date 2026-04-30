@@ -39,6 +39,11 @@ class TestReadActionValidation:
         with pytest.raises(ActionValidationError, match="invalid read params"):
             action.execute()
 
+    def test_empty_contains_raises(self, memory_root: Path) -> None:
+        action = ReadAction(ActionParam({"path": "a.txt", "contains": ""}))
+        with pytest.raises(ActionValidationError, match="invalid read params"):
+            action.execute()
+
 
 class TestReadActionExecution:
     def test_reads_existing_file_successfully(self, memory_root: Path) -> None:
@@ -70,6 +75,30 @@ class TestReadActionExecution:
         action = ReadAction(ActionParam({"path": "missing.txt"}))
         with pytest.raises(ActionError, match="read failed: file not found"):
             action.execute()
+
+    def test_contains_returns_all_matching_lines(self, memory_root: Path) -> None:
+        memory_root.mkdir(parents=True, exist_ok=True)
+        target = memory_root / "notes.txt"
+        target.write_text("breakfast: eggs\nlunch: salad\nlunch: soup\n", encoding="utf-8")
+
+        action = ReadAction(ActionParam({"path": "notes.txt", "contains": "lunch"}))
+        result = action.execute()
+
+        assert result == "lunch: salad\nlunch: soup"
+        assert action.result == "lunch: salad\nlunch: soup"
+        assert action.last_error is None
+
+    def test_contains_returns_empty_when_no_match(self, memory_root: Path) -> None:
+        memory_root.mkdir(parents=True, exist_ok=True)
+        target = memory_root / "notes.txt"
+        target.write_text("breakfast: eggs\nlunch: salad\n", encoding="utf-8")
+
+        action = ReadAction(ActionParam({"path": "notes.txt", "contains": "dinner"}))
+        result = action.execute()
+
+        assert result == ""
+        assert action.result == ""
+        assert action.last_error is None
 
     def test_invalid_filename_maps_to_action_error(self, memory_root: Path) -> None:
         action = ReadAction(ActionParam({"path": "nested/file.txt"}))

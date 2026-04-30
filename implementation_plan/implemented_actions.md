@@ -17,12 +17,14 @@ Concrete actions under `BaseAction`; `params` is the object inside `ActionParam`
   "additionalProperties": false,
   "required": ["path"],
   "properties": {
-    "path": { "type": "string", "minLength": 1 }
+    "path": { "type": "string", "minLength": 1 },
+    "contains": {"type": "string", "minLength": 1, "optional": true}
   }
 }
 ```
 
 - `path`: filesystem path to read.
+- `contains`: read only the set of lines that contains the string specified under `contains` params. These lines will be appended together by `\n`
 - Runtime defaults (encoding, read limits) are internal and not exposed in LLM `params`.
 
 ---

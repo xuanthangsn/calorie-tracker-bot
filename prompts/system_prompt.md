@@ -22,7 +22,8 @@ You have access to a local file system to store and retrieve information. When y
   "action": "read",
   "thought": "string <your step-by-step reasoning for choosing this tool>",
   "params": {
-    "path": "string <target file path>"
+    "path": "string <target file path>",
+    "contains": "string, optional <only read the lines that contain the text specified in this param>"
   }
 }
 
