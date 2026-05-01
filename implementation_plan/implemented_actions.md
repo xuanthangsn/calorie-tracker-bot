@@ -42,7 +42,7 @@ Concrete actions under `BaseAction`; `params` is the object inside `ActionParam`
 
 ## `write`
 
-**Behavior:** Write `content` to `path` (overwrite semantics for simplicity).
+**Behavior:** append new `content` to the file, or replace the lines specified by the `content`.
 
 **Param schema (validation):**
 
@@ -54,13 +54,19 @@ Concrete actions under `BaseAction`; `params` is the object inside `ActionParam`
   "required": ["path", "content"],
   "properties": {
     "path": { "type": "string", "minLength": 1 },
+    "mode": { "type": "string", "enum": ["append", "replace_lines"]},
+    "start_line": { "type": "number", "optional": true},
+    "end_line": { "type": "number", "optional": true},
     "content": { "type": "string" }
   }
 }
 ```
 
 - `path`: target file path.
-- `content`: full text to write.
+- `mode`: use `append` mode to append content to file in the new line, use `replace_lines` to replace the all the lines in range `start_line` to `end_line` with the specified content  
+- `content`: full text to be appended if mode = "append", or to be replaced to specified lines if mode = "replace_lines".
+- `start_line`: use with `replace_lines` mode to specify the where to start replacing
+- `end_line`: use with `replace_lines` mode to specify the where to end replacing
 - Runtime defaults (encoding, parent dir policy) are internal and not exposed in LLM `params`.
 
 ---

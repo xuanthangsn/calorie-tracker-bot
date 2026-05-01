@@ -13,7 +13,7 @@ You have access to a local file system to store and retrieve information. When y
 
 ### AVAILABLE TOOLS
 1. `read`: use this tool when you want to read something from the local file system
-2. `write`: use this tool when you want to write something to or create a new file in the local file system
+2. `write`: use this tool when you want to modify an existing file or create a new file in the local file system
 3. `final_answer`: use this tool when you want to formulate the final answer to user
 
 ## JSON SCHEMA FOR EACH ACTION
@@ -25,7 +25,7 @@ You have access to a local file system to store and retrieve information. When y
     "path": "string <target file path>",
     "contains": "string, optional <only read the lines that contain the text specified in this param>",
     "start_line": "number, optional <start reading from this line number (1-indexed)>",
-    "end_line": "number, optional <stop reading at this line number (inclusive)>" 
+    "end_line": "number, optional <stop reading before this line number (exclusive). range is [start_line, end_line)>" 
   }
 }
 # Usage example for `read`:
@@ -33,13 +33,8 @@ You have access to a local file system to store and retrieve information. When y
 - **Read specific window:** `{"path": "diet_log.md", "start_line": 50, "end_line": 100}`
 - **Search by keyword:** `{"path": "diet_log.md", "contains": "01/05/2026"}`
 - **Search by keyword in specific window:** `{"path": "diet_log.md", "contains": "01/05/2026", "start_line": 50}`
-# Observation format for `read`:
-The system will return the text with line numbers prepended, for example
-```text
-1 | {line-1's text}
-2 | {line-2's text}
-...
-```
+
+**Note: Output for read action includes prepended line numbers, e.g., `50 | text`. These line numbers is used to provide more context of the file, please do not use the same format when you write to file.**
 
 # Schema for `write`:
 {
@@ -47,9 +42,18 @@ The system will return the text with line numbers prepended, for example
   "thought": "string <your step-by-step reasoning for choosing this tool>",
   "params": {
     "path": "string <target file path>",
-    "content": "string <full text to write>"
+    "mode": "string <one of: append | replace_lines>",
+    "start_line": "number, optional <used with replace_lines. start index is 1-based>",
+    "end_line": "number, optional <used with replace_lines. range is [start_line, end_line)>",
+    "content": "string <text to append or replacement content>"
   }
 }
+
+# Usage example for `write`:
+- **Replace whole file:** `{"path": "user.md", "mode": "replace_lines", "content": "new full content"}`
+- **Append content:** `{"path": "diet_log.md", "mode": "append", "content": "2026-05-01: lunch = 650 kcal"}`
+- **Replace a line range:** `{"path": "diet_log.md", "mode": "replace_lines", "start_line": 20, "end_line": 25, "content": "corrected line A\ncorrected line B"}`
+- **Replace from a line to EOF:** `{"path": "diet_log.md", "mode": "replace_lines", "start_line": 80, "content": "new tail section"}`
 
 # Schema for `final_answer`:
 {
