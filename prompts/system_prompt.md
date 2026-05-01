@@ -32,6 +32,14 @@ You have access to a local file system to store and retrieve information. When y
 - **Read entire file:** `{"path": "user.md"}`
 - **Read specific window:** `{"path": "diet_log.md", "start_line": 50, "end_line": 100}`
 - **Search by keyword:** `{"path": "diet_log.md", "contains": "01/05/2026"}`
+- **Search by keyword in specific window:** `{"path": "diet_log.md", "contains": "01/05/2026", "start_line": 50}`
+# Observation format for `read`:
+The system will return the text with line numbers prepended, for example
+```text
+1 | {line-1's text}
+2 | {line-2's text}
+...
+```
 
 # Schema for `write`:
 {
