@@ -1,7 +1,7 @@
 """Concrete read action with strict filesystem permission checks."""
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from agent.action import ActionError, ActionValidationError, BaseAction
 from agent.action_param import ActionParam
@@ -14,6 +14,18 @@ class ReadParamsModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
     path: str = Field(min_length=1)
     contains: str | None = Field(default=None, min_length=1)
+    start_line: int | None = Field(default=None, ge=1)
+    end_line: int | None = Field(default=None, ge=1)
+
+    @model_validator(mode="after")
+    def validate_line_bounds(self) -> "ReadParamsModel":
+        if (
+            self.start_line is not None
+            and self.end_line is not None
+            and self.end_line < self.start_line
+        ):
+            raise ValueError("end_line must be greater than or equal to start_line")
+        return self
 
 
 class ReadAction(BaseAction):
@@ -43,14 +55,24 @@ class ReadAction(BaseAction):
             safe_path = resolve_workspace_path(requested_path)
             content = safe_path.read_text(encoding="utf-8")
             contains = self._validated_params.contains
-            if contains is None:
-                return content
+            start_line = self._validated_params.start_line
+            end_line = self._validated_params.end_line
 
-            matching_lines = []
-            for line in content.splitlines():
-                if contains in line:
-                    matching_lines.append(line)
-            return "\n".join(matching_lines)
+            filtered_lines: list[tuple[int, str]] = []
+            max_digits = 0
+            for line_number, line in enumerate(content.splitlines(), start=1):
+                if start_line is not None and line_number < start_line:
+                    continue
+                if end_line is not None and line_number >= end_line:
+                    continue
+                if contains is not None and contains not in line:
+                    continue
+                filtered_lines.append((line_number, line))
+                max_digits = max(max_digits, len(str(line_number)))
+
+            return "\n".join(
+                f"{str(line_number).rjust(max_digits)} | {line}" for line_number, line in filtered_lines
+            )
         except InvalidLLMRequestedPath as exc:
             raise ActionError(f"the requested read file path is invalid: '{requested_path}'") from exc
         except FileNotFoundError as exc:

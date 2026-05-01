@@ -23,9 +23,15 @@ You have access to a local file system to store and retrieve information. When y
   "thought": "string <your step-by-step reasoning for choosing this tool>",
   "params": {
     "path": "string <target file path>",
-    "contains": "string, optional <only read the lines that contain the text specified in this param>"
+    "contains": "string, optional <only read the lines that contain the text specified in this param>",
+    "start_line": "number, optional <start reading from this line number (1-indexed)>",
+    "end_line": "number, optional <stop reading at this line number (inclusive)>" 
   }
 }
+# Usage example for `read`:
+- **Read entire file:** `{"path": "user.md"}`
+- **Read specific window:** `{"path": "diet_log.md", "start_line": 50, "end_line": 100}`
+- **Search by keyword:** `{"path": "diet_log.md", "contains": "01/05/2026"}`
 
 # Schema for `write`:
 {

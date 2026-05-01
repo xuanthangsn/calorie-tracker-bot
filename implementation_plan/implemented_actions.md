@@ -18,13 +18,24 @@ Concrete actions under `BaseAction`; `params` is the object inside `ActionParam`
   "required": ["path"],
   "properties": {
     "path": { "type": "string", "minLength": 1 },
-    "contains": {"type": "string", "minLength": 1, "optional": true}
+    "contains": {"type": "string", "minLength": 1, "optional": true},
+    "start_line": {"type": "number", "minLength": 1, "optional": true},
+    "end_line": {"type": "number", "minLength": 1, "optional": true}
   }
 }
 ```
 
 - `path`: filesystem path to read.
 - `contains`: read only the set of lines that contains the string specified under `contains` params. These lines will be appended together by `\n`
+- `start_line`, `end_line`: 
+  - only read from the start_line to the end_line, if end_line is not specified, then read from the start_line to the end of the file. [start_line, end_line)
+  - Indexed from 1
+- prepend line number in the read result like this to provide extra information about line number of read result to LLM
+  ```text
+    140 | {actual_text}
+    141 | {actual_text}
+    142 | {actual_text}
+  ```
 - Runtime defaults (encoding, read limits) are internal and not exposed in LLM `params`.
 
 ---
