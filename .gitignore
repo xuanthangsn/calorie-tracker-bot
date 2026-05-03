@@ -40,3 +40,4 @@ htmlcov/
 
 test.py
 memory/
+test_agent.py

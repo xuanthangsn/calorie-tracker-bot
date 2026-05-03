@@ -3,3 +3,4 @@ He is a huge fan of Cristiano Ronaldo, he is looking forward to watch Ronaldo pl
 He is really into fitness and want to build a lean, muscular body.
 His goal is to lower his body fat to 15% along with gaining muscle at the end of 2026.
 He wants to get an AWS certificate this year.
+He also wants to find a new girlfriend this year, go on a date with her, and lose his virginity.
