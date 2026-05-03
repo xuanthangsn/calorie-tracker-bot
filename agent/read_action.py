@@ -59,7 +59,7 @@ class ReadAction(BaseAction):
             end_line = self._validated_params.end_line
 
             filtered_lines: list[tuple[int, str]] = []
-            max_digits = 0
+            # max_digits = 0
             for line_number, line in enumerate(content.splitlines(), start=1):
                 if start_line is not None and line_number < start_line:
                     continue
@@ -68,10 +68,10 @@ class ReadAction(BaseAction):
                 if contains is not None and contains not in line:
                     continue
                 filtered_lines.append((line_number, line))
-                max_digits = max(max_digits, len(str(line_number)))
+                # max_digits = max(max_digits, len(str(line_number)))
 
             return "\n".join(
-                f"{str(line_number).rjust(max_digits)} | {line}" for line_number, line in filtered_lines
+                f"[L{line_number}] {line}" for line_number, line in filtered_lines
             )
         except InvalidLLMRequestedPath as exc:
             raise ActionError(f"the requested read file path is invalid: '{requested_path}'") from exc

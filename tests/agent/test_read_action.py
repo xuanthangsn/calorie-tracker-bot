@@ -64,8 +64,8 @@ class TestReadActionExecution:
         action = ReadAction(ActionParam({"path": "notes.txt"}))
         result = action.execute()
 
-        assert result == "1 | hello"
-        assert action.result == "1 | hello"
+        assert result == "[L1] hello"
+        assert action.result == "[L1] hello"
         assert action.last_error is None
 
     def test_reads_multiline_markdown_file_successfully(self, memory_root: Path) -> None:
@@ -78,12 +78,12 @@ class TestReadActionExecution:
         result = action.execute()
 
         assert result == (
-            "1 | # Daily Summary\n"
-            "2 | \n"
-            "3 | - Breakfast: eggs\n"
-            "4 | - Lunch: salad\n"
-            "5 | \n"
-            "6 | Total: 1200 kcal"
+            "[L1] # Daily Summary\n"
+            "[L2] \n"
+            "[L3] - Breakfast: eggs\n"
+            "[L4] - Lunch: salad\n"
+            "[L5] \n"
+            "[L6] Total: 1200 kcal"
         )
         assert action.result == result
         assert action.last_error is None
@@ -101,8 +101,8 @@ class TestReadActionExecution:
         action = ReadAction(ActionParam({"path": "notes.txt", "contains": "lunch"}))
         result = action.execute()
 
-        assert result == "2 | lunch: salad\n3 | lunch: soup"
-        assert action.result == "2 | lunch: salad\n3 | lunch: soup"
+        assert result == "[L2] lunch: salad\n[L3] lunch: soup"
+        assert action.result == "[L2] lunch: salad\n[L3] lunch: soup"
         assert action.last_error is None
 
     def test_contains_returns_empty_when_no_match(self, memory_root: Path) -> None:
@@ -125,8 +125,8 @@ class TestReadActionExecution:
         action = ReadAction(ActionParam({"path": "notes.txt", "start_line": 2, "end_line": 4}))
         result = action.execute()
 
-        assert result == "2 | b\n3 | c"
-        assert action.result == "2 | b\n3 | c"
+        assert result == "[L2] b\n[L3] c"
+        assert action.result == "[L2] b\n[L3] c"
         assert action.last_error is None
 
     def test_start_line_without_end_line_reads_to_file_end(self, memory_root: Path) -> None:
@@ -137,8 +137,8 @@ class TestReadActionExecution:
         action = ReadAction(ActionParam({"path": "notes.txt", "start_line": 2}))
         result = action.execute()
 
-        assert result == "2 | b\n3 | c"
-        assert action.result == "2 | b\n3 | c"
+        assert result == "[L2] b\n[L3] c"
+        assert action.result == "[L2] b\n[L3] c"
         assert action.last_error is None
 
     def test_contains_and_line_range_are_combined(self, memory_root: Path) -> None:
@@ -151,8 +151,8 @@ class TestReadActionExecution:
         )
         result = action.execute()
 
-        assert result == "2 | banana\n3 | apricot"
-        assert action.result == "2 | banana\n3 | apricot"
+        assert result == "[L2] banana\n[L3] apricot"
+        assert action.result == "[L2] banana\n[L3] apricot"
         assert action.last_error is None
 
     def test_line_numbers_are_left_padded_to_max_width(self, memory_root: Path) -> None:
@@ -163,8 +163,8 @@ class TestReadActionExecution:
         action = ReadAction(ActionParam({"path": "notes.txt", "start_line": 9, "end_line": 12}))
         result = action.execute()
 
-        assert result == " 9 | line-9\n10 | line-10\n11 | line-11"
-        assert action.result == " 9 | line-9\n10 | line-10\n11 | line-11"
+        assert result == "[L9] line-9\n[L10] line-10\n[L11] line-11"
+        assert action.result == "[L9] line-9\n[L10] line-10\n[L11] line-11"
         assert action.last_error is None
 
     def test_padding_uses_filtered_result_max_line_width(self, memory_root: Path) -> None:
@@ -178,9 +178,8 @@ class TestReadActionExecution:
         action = ReadAction(ActionParam({"path": "notes.txt", "contains": "line-1"}))
         result = action.execute()
 
-        # matching lines are 1, 10, 11 so width is 2 in filtered output.
-        assert result == " 1 | line-1\n10 | line-10\n11 | line-11"
-        assert action.result == " 1 | line-1\n10 | line-10\n11 | line-11"
+        assert result == "[L1] line-1\n[L10] line-10\n[L11] line-11"
+        assert action.result == "[L1] line-1\n[L10] line-10\n[L11] line-11"
         assert action.last_error is None
 
     def test_invalid_filename_maps_to_action_error(self, memory_root: Path) -> None:

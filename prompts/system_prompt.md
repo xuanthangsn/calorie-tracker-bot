@@ -34,7 +34,7 @@ You have access to a local file system to store and retrieve information. When y
 - **Search by keyword:** `{"path": "diet_log.md", "contains": "01/05/2026"}`
 - **Search by keyword in specific window:** `{"path": "diet_log.md", "contains": "01/05/2026", "start_line": 50}`
 
-**Note: Output for read action includes prepended line numbers, e.g., `50 | text`. These line numbers is used to provide more context of the file, please do not use the same format when you write to file.**
+**CRITICAL NOTE ON READ OUTPUT:** The system prepends line numbers to the read output (e.g., `[L50] actual file text`). These numbers are system artifacts to help you target your edits. They are NOT part of the file.
 
 # Schema for `write`:
 {
@@ -42,16 +42,17 @@ You have access to a local file system to store and retrieve information. When y
   "thought": "string <your step-by-step reasoning for choosing this tool>",
   "params": {
     "path": "string <target file path>",
-    "mode": "string <one of: append | replace_lines>",
+    "mode": "string <one of: `append` | `replace_lines`, use `append` to add content to the very bottom of the file, use `replace_lines` to replace the specified lines with the content>",
     "start_line": "number, optional <used with replace_lines. start index is 1-based>",
     "end_line": "number, optional <used with replace_lines. range is [start_line, end_line)>",
-    "content": "string <text to append or replacement content>"
+    "content": "string <RAW text to append or replace. NEVER include the '[L{line_number}] ' prefix from the read output. Provide only the exact text to be saved.>"
   }
 }
 
 # Usage example for `write`:
 - **Replace whole file:** `{"path": "user.md", "mode": "replace_lines", "content": "new full content"}`
 - **Append content:** `{"path": "diet_log.md", "mode": "append", "content": "2026-05-01: lunch = 650 kcal"}`
+- **Delete a line:** `{"path": "diet_log.md", "mode": "replace_lines", "start_line": 15, "end_line": 16, "content": ""}`
 - **Replace a line range:** `{"path": "diet_log.md", "mode": "replace_lines", "start_line": 20, "end_line": 25, "content": "corrected line A\ncorrected line B"}`
 - **Replace from a line to EOF:** `{"path": "diet_log.md", "mode": "replace_lines", "start_line": 80, "content": "new tail section"}`
 

@@ -89,6 +89,7 @@ class WriteAction(BaseAction):
             safe_path.parent.mkdir(parents=True, exist_ok=True)
 
             if mode == "append":
+                content = content.strip()
                 if safe_path.exists():
                     # append content in a new line
                     existing = safe_path.read_text(encoding="utf-8")

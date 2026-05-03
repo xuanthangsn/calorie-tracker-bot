@@ -15,8 +15,10 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from agent.action import ActionError, ActionValidationError, BaseAction
 from agent.action_param import ActionParam
+from agent.append_action import AppendAction
 from agent.final_answer_action import FinalAnswerAction
 from agent.read_action import ReadAction
+from agent.replace_action import ReplaceAction
 from agent.write_action import WriteAction
 from google import genai
 from google.genai import types
@@ -66,6 +68,8 @@ class LLMResponse(BaseModel):
 class ActionType(Enum):
     READ = "read"
     WRITE = "write"
+    APPEND = "append"
+    REPLACE = "replace"
     FINAL_ANSWER = "final_answer"
 
 
@@ -90,6 +94,8 @@ class Task:
     ACTION_REGISTRY: dict[str, Callable[[ActionParam], BaseAction]] = {
         ActionType.READ.value: ReadAction,
         ActionType.WRITE.value: WriteAction,
+        ActionType.APPEND.value: AppendAction,
+        ActionType.REPLACE.value: ReplaceAction,
         ActionType.FINAL_ANSWER.value: FinalAnswerAction,
     }
 

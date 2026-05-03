@@ -71,6 +71,59 @@ Concrete actions under `BaseAction`; `params` is the object inside `ActionParam`
 
 ---
 
+## `append`
+
+**Behavior:** append new `content` to the end of the file.
+
+**Param schema (validation):**
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["path", "content"],
+  "properties": {
+    "path": { "type": "string", "minLength": 1 },
+    "content": { "type": "string" }
+  }
+}
+```
+
+- `path`: target file path.
+- `content`: full text to be appended
+- Runtime defaults (encoding, parent dir policy) are internal and not exposed in LLM `params`.
+
+---
+
+## `replace`
+
+**Behavior:** replace the specified old text in the file with the new text
+
+**Param schema (validation):**
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["path", "content"],
+  "properties": {
+    "path": { "type": "string", "minLength": 1 },
+    "old_text": { "type": "string" },
+    "new_text": { "type": "string" }
+  }
+}
+```
+
+- `path`: target file path.
+- `old_text`: the text to be replaced
+- `new_text`: the text to replace with the old one
+- Runtime defaults (encoding, parent dir policy) are internal and not exposed in LLM `params`.
+
+---
+
+
 ## `final_answer`
 
 **Behavior:**
