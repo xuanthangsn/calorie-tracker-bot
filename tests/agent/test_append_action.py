@@ -59,17 +59,6 @@ class TestAppendActionExecution:
         assert (memory_root / "notes.txt").read_text(encoding="utf-8") == "first"
         assert action.last_error is None
 
-    def test_appends_by_raw_concatenation_no_automatic_newline(self, memory_root: Path) -> None:
-        memory_root.mkdir(parents=True, exist_ok=True)
-        target = memory_root / "notes.txt"
-        target.write_text("hello", encoding="utf-8")
-
-        action = AppendAction(ActionParam({"path": "notes.txt", "content": "world"}))
-        result = action.execute()
-
-        assert result == "world"
-        assert target.read_text(encoding="utf-8") == "helloworld"
-
     def test_append_after_trailing_newline_is_plain_concat(self, memory_root: Path) -> None:
         memory_root.mkdir(parents=True, exist_ok=True)
         target = memory_root / "notes.txt"
@@ -81,15 +70,15 @@ class TestAppendActionExecution:
         assert result == "world"
         assert target.read_text(encoding="utf-8") == "hello\nworld"
 
-    def test_explicit_newline_in_content_is_preserved(self, memory_root: Path) -> None:
+    def test_add_newline_to_file_if_not_end_with_newline(self, memory_root: Path) -> None:
         memory_root.mkdir(parents=True, exist_ok=True)
         target = memory_root / "notes.txt"
         target.write_text("hello", encoding="utf-8")
 
-        action = AppendAction(ActionParam({"path": "notes.txt", "content": "\nworld"}))
+        action = AppendAction(ActionParam({"path": "notes.txt", "content": "world"}))
         result = action.execute()
 
-        assert result == "\nworld"
+        assert result == "world"
         assert target.read_text(encoding="utf-8") == "hello\nworld"
 
     def test_invalid_filename_maps_to_action_error(self, memory_root: Path) -> None:

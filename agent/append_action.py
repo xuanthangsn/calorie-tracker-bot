@@ -17,7 +17,7 @@ class AppendParamsModel(BaseModel):
 
 
 class AppendAction(BaseAction):
-    """Append text to a file under memory root (filename only); `new_text = old_text + content`."""
+    """Append text to a file under memory root (filename only); add a new line to the file if the file does not end with a newline."""
 
     name = "append"
 
@@ -42,12 +42,12 @@ class AppendAction(BaseAction):
             safe_path.parent.mkdir(parents=True, exist_ok=True)
             if safe_path.exists():
                 existing = safe_path.read_text(encoding="utf-8")
-                # trailing_newline = existing.endswith("\n")
-                # if trailing_newline:
-                #     new_text = existing + content
-                # else:
-                #     new_text = existing + "\n" + content
-                new_text = existing + content
+                trailing_newline = existing.endswith("\n")
+                if trailing_newline:
+                    new_text = existing + content
+                else:
+                    new_text = existing + "\n" + content
+                # new_text = existing + content
             else:
                 new_text = content
             safe_path.write_text(new_text, encoding="utf-8")
