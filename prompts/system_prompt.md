@@ -13,8 +13,10 @@ You have access to a local file system to store and retrieve information. When y
 
 ### AVAILABLE TOOLS
 1. `read`: use this tool when you want to read something from the local file system
-2. `write`: use this tool when you want to modify an existing file or create a new file in the local file system
-3. `final_answer`: use this tool when you want to formulate the final answer to user
+2. `write`: use this tool when you want to overwrite the content of a file or create a new file in the local file system
+3. `append`: use this tool when you want to append a text to a file
+4. `replace`: use this tool when you want to replace an old text with the new one in the targeted file
+5. `final_answer`: use this tool when you want to formulate the final answer to user
 
 ## JSON SCHEMA FOR EACH ACTION
 # Schema for `read`:
@@ -23,18 +25,9 @@ You have access to a local file system to store and retrieve information. When y
   "thought": "string <your step-by-step reasoning for choosing this tool>",
   "params": {
     "path": "string <target file path>",
-    "contains": "string, optional <only read the lines that contain the text specified in this param>",
-    "start_line": "number, optional <start reading from this line number (1-indexed)>",
-    "end_line": "number, optional <stop reading before this line number (exclusive). range is [start_line, end_line)>" 
+    "tail": "string, optional <only read the last n lines of the targeted file, n is indicated by the `tail` param, if `tail` param is missing, or if `tail` is greater than file_line_number then read the whole file>"
   }
 }
-# Usage example for `read`:
-- **Read entire file:** `{"path": "user.md"}`
-- **Read specific window:** `{"path": "diet_log.md", "start_line": 50, "end_line": 100}`
-- **Search by keyword:** `{"path": "diet_log.md", "contains": "01/05/2026"}`
-- **Search by keyword in specific window:** `{"path": "diet_log.md", "contains": "01/05/2026", "start_line": 50}`
-
-**CRITICAL NOTE ON READ OUTPUT:** The system prepends line numbers to the read output (e.g., `[L50] actual file text`). These numbers are system artifacts to help you target your edits. They are NOT part of the file.
 
 # Schema for `write`:
 {
@@ -42,19 +35,30 @@ You have access to a local file system to store and retrieve information. When y
   "thought": "string <your step-by-step reasoning for choosing this tool>",
   "params": {
     "path": "string <target file path>",
-    "mode": "string <one of: `append` | `replace_lines`, use `append` to add content to the very bottom of the file, use `replace_lines` to replace the specified lines with the content>",
-    "start_line": "number, optional <used with replace_lines. start index is 1-based>",
-    "end_line": "number, optional <used with replace_lines. range is [start_line, end_line)>",
-    "content": "string <RAW text to append or replace. NEVER include the '[L{line_number}] ' prefix from the read output. Provide only the exact text to be saved.>"
+    "content": "string <the content to be overwritten to the targeted file>"
   }
 }
 
-# Usage example for `write`:
-- **Replace whole file:** `{"path": "user.md", "mode": "replace_lines", "content": "new full content"}`
-- **Append content:** `{"path": "diet_log.md", "mode": "append", "content": "2026-05-01: lunch = 650 kcal"}`
-- **Delete a line:** `{"path": "diet_log.md", "mode": "replace_lines", "start_line": 15, "end_line": 16, "content": ""}`
-- **Replace a line range:** `{"path": "diet_log.md", "mode": "replace_lines", "start_line": 20, "end_line": 25, "content": "corrected line A\ncorrected line B"}`
-- **Replace from a line to EOF:** `{"path": "diet_log.md", "mode": "replace_lines", "start_line": 80, "content": "new tail section"}`
+# Schema for `append`:
+{
+  "action": "write",
+  "thought": "string <your step-by-step reasoning for choosing this tool>",
+  "params": {
+    "path": "string <target file path>",
+    "content": "string <the content to be appended to the targeted file>"
+  }
+}
+
+# Schema for `replace`:
+{
+  "action": "write",
+  "thought": "string <your step-by-step reasoning for choosing this tool>",
+  "params": {
+    "path": "string <target file path>",
+    "old_text": "string <the old text to be replaced>"
+    "new_text": "string <the new text to replace the old one>"
+  }
+}
 
 # Schema for `final_answer`:
 {

@@ -40,142 +40,62 @@ class TestWriteActionValidation:
             action.execute()
 
     def test_extra_field_raises(self, memory_root: Path) -> None:
-        action = WriteAction(ActionParam({"path": "a.txt", "content": "x", "extra": 1}))
-        with pytest.raises(ActionValidationError, match="invalid write params"):
-            action.execute()
-
-    def test_invalid_mode_raises(self, memory_root: Path) -> None:
-        action = WriteAction(ActionParam({"path": "a.txt", "content": "x", "mode": "overwrite"}))
-        with pytest.raises(ActionValidationError, match="invalid write params"):
-            action.execute()
-
-    def test_end_line_less_than_start_line_raises(self, memory_root: Path) -> None:
-        action = WriteAction(
-            ActionParam({"path": "a.txt", "content": "x", "mode": "replace_lines", "start_line": 5, "end_line": 2})
-        )
+        action = WriteAction(ActionParam({"path": "a.txt", "content": "x", "mode": "append"}))
         with pytest.raises(ActionValidationError, match="invalid write params"):
             action.execute()
 
 
 class TestWriteActionExecution:
-    def test_writes_file_successfully(self, memory_root: Path) -> None:
-        action = WriteAction(
-            ActionParam({"path": "output.txt", "content": "hello", "mode": "replace_lines"})
-        )
+    def test_creates_file_with_content(self, memory_root: Path) -> None:
+        action = WriteAction(ActionParam({"path": "output.txt", "content": "hello"}))
         result = action.execute()
 
         assert result == "hello"
         assert (memory_root / "output.txt").read_text(encoding="utf-8") == "hello"
         assert action.last_error is None
 
-    def test_overwrites_existing_file(self, memory_root: Path) -> None:
+    def test_overwrites_whole_file(self, memory_root: Path) -> None:
         memory_root.mkdir(parents=True, exist_ok=True)
         target = memory_root / "output.txt"
+        target.write_text("line1\nline2\nline3\n", encoding="utf-8")
+
+        action = WriteAction(ActionParam({"path": "output.txt", "content": "only this"}))
+        result = action.execute()
+
+        assert result == "only this"
+        assert target.read_text(encoding="utf-8") == "only this"
+
+    def test_overwrite_empty_file(self, memory_root: Path) -> None:
+        memory_root.mkdir(parents=True, exist_ok=True)
+        target = memory_root / "empty.txt"
+        target.write_text("", encoding="utf-8")
+
+        action = WriteAction(ActionParam({"path": "empty.txt", "content": "now has text"}))
+        action.execute()
+
+        assert target.read_text(encoding="utf-8") == "now has text"
+
+    def test_multiline_content_overwrites_entire_file(self, memory_root: Path) -> None:
+        memory_root.mkdir(parents=True, exist_ok=True)
+        target = memory_root / "doc.md"
         target.write_text("old", encoding="utf-8")
+        new_body = "# Title\n\n- one\n- two\n\nend.\n"
 
-        action = WriteAction(
-            ActionParam({"path": "output.txt", "content": "new", "mode": "replace_lines"})
-        )
+        action = WriteAction(ActionParam({"path": "doc.md", "content": new_body}))
         result = action.execute()
 
-        assert result == "new"
-        assert target.read_text(encoding="utf-8") == "new"
-
-    def test_explicit_replace_lines_overwrites_file(self, memory_root: Path) -> None:
-        memory_root.mkdir(parents=True, exist_ok=True)
-        target = memory_root / "output.txt"
-        target.write_text("old", encoding="utf-8")
-
-        action = WriteAction(
-            ActionParam({"path": "output.txt", "content": "new", "mode": "replace_lines"})
-        )
-        result = action.execute()
-
-        assert result == "new"
-        assert target.read_text(encoding="utf-8") == "new"
-
-    def test_append_adds_newline_when_existing_file_has_no_trailing_newline(self, memory_root: Path) -> None:
-        memory_root.mkdir(parents=True, exist_ok=True)
-        target = memory_root / "output.txt"
-        target.write_text("hello", encoding="utf-8")
-
-        action = WriteAction(
-            ActionParam({"path": "output.txt", "content": "world", "mode": "append"})
-        )
-        result = action.execute()
-
-        assert result == "world"
-        assert target.read_text(encoding="utf-8") == "hello\nworld"
-
-    def test_append_does_not_add_extra_newline_when_file_already_has_trailing_newline(
-        self, memory_root: Path
-    ) -> None:
-        memory_root.mkdir(parents=True, exist_ok=True)
-        target = memory_root / "output.txt"
-        target.write_text("hello\n", encoding="utf-8")
-
-        action = WriteAction(
-            ActionParam({"path": "output.txt", "content": "world", "mode": "append"})
-        )
-        result = action.execute()
-
-        assert result == "world"
-        assert target.read_text(encoding="utf-8") == "hello\nworld"
-
-    def test_replace_lines_half_open_range(self, memory_root: Path) -> None:
-        memory_root.mkdir(parents=True, exist_ok=True)
-        target = memory_root / "output.txt"
-        target.write_text("a\nb\nc\nd\n", encoding="utf-8")
-
-        action = WriteAction(
-            ActionParam(
-                {
-                    "path": "output.txt",
-                    "content": "x\ny",
-                    "mode": "replace_lines",
-                    "start_line": 2,
-                    "end_line": 4,
-                }
-            )
-        )
-        result = action.execute()
-
-        assert result == "x\ny"
-        assert target.read_text(encoding="utf-8") == "a\nx\ny\nd\n"
-
-    def test_replace_lines_from_start_to_eof(self, memory_root: Path) -> None:
-        memory_root.mkdir(parents=True, exist_ok=True)
-        target = memory_root / "output.txt"
-        target.write_text("a\nb\nc\n", encoding="utf-8")
-
-        action = WriteAction(
-            ActionParam(
-                {
-                    "path": "output.txt",
-                    "content": "tail",
-                    "mode": "replace_lines",
-                    "start_line": 2,
-                }
-            )
-        )
-        result = action.execute()
-
-        assert result == "tail"
-        assert target.read_text(encoding="utf-8") == "a\ntail\n"
+        assert result == new_body
+        assert target.read_text(encoding="utf-8") == new_body
 
     def test_invalid_filename_maps_to_action_error(self, memory_root: Path) -> None:
-        action = WriteAction(
-            ActionParam({"path": "nested/file.txt", "content": "x", "mode": "replace_lines"})
-        )
+        action = WriteAction(ActionParam({"path": "nested/file.txt", "content": "x"}))
         with pytest.raises(ActionError, match="the requested write file path is invalid"):
             action.execute()
 
     def test_directory_target_maps_to_action_error(self, memory_root: Path) -> None:
         memory_root.mkdir(parents=True, exist_ok=True)
         (memory_root / "adir").mkdir()
-        action = WriteAction(
-            ActionParam({"path": "adir", "content": "x", "mode": "replace_lines"})
-        )
+        action = WriteAction(ActionParam({"path": "adir", "content": "x"}))
 
         with pytest.raises(ActionError, match="write failed: path is a directory"):
             action.execute()
