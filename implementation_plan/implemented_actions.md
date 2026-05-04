@@ -18,31 +18,44 @@ Concrete actions under `BaseAction`; `params` is the object inside `ActionParam`
   "required": ["path"],
   "properties": {
     "path": { "type": "string", "minLength": 1 },
-    "contains": {"type": "string", "minLength": 1, "optional": true},
-    "start_line": {"type": "number", "minLength": 1, "optional": true},
-    "end_line": {"type": "number", "minLength": 1, "optional": true}
+    "tail": { "type": "string", "minLength": 1, "description": "get the last n line of the targeted file, n specifid by the `tail` param"}
   }
 }
 ```
 
 - `path`: filesystem path to read.
-- `contains`: read only the set of lines that contains the string specified under `contains` params. These lines will be appended together by `\n`
-- `start_line`, `end_line`: 
-  - only read from the start_line to the end_line, if end_line is not specified, then read from the start_line to the end of the file. [start_line, end_line)
-  - Indexed from 1
-- prepend line number in the read result like this to provide extra information about line number of read result to LLM
-  ```text
-    140 | {actual_text}
-    141 | {actual_text}
-    142 | {actual_text}
-  ```
+- `tail`: this action will return the last n lines of the targeted file, n is specified by `tail` param, if `tail` param is not set, or if the `tail` > number of line in the file, then read the whole file.
 - Runtime defaults (encoding, read limits) are internal and not exposed in LLM `params`.
 
 ---
 
 ## `write`
 
-**Behavior:** append new `content` to the file, or replace the lines specified by the `content`.
+**Behavior:** overwrite the whole file with new content
+**Param schema (validation):**
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["path", "content"],
+  "properties": {
+    "path": { "type": "string", "minLength": 1 },
+    "content": { "type": "string" }
+  }
+}
+```
+
+- `path`: target file path.
+- `content`: the content to be overwrited to the file
+- Runtime defaults (encoding, parent dir policy) are internal and not exposed in LLM `params`.
+
+---
+
+## `append`
+
+**Behavior:** append new `content` to the end of the file.
 
 **Param schema (validation):**
 
@@ -54,22 +67,44 @@ Concrete actions under `BaseAction`; `params` is the object inside `ActionParam`
   "required": ["path", "content"],
   "properties": {
     "path": { "type": "string", "minLength": 1 },
-    "mode": { "type": "string", "enum": ["append", "replace_lines"]},
-    "start_line": { "type": "number", "optional": true},
-    "end_line": { "type": "number", "optional": true},
     "content": { "type": "string" }
   }
 }
 ```
 
 - `path`: target file path.
-- `mode`: use `append` mode to append content to file in the new line, use `replace_lines` to replace the all the lines in range `start_line` to `end_line` with the specified content  
-- `content`: full text to be appended if mode = "append", or to be replaced to specified lines if mode = "replace_lines".
-- `start_line`: use with `replace_lines` mode to specify the where to start replacing
-- `end_line`: use with `replace_lines` mode to specify the where to end replacing
+- `content`: full text to be appended
 - Runtime defaults (encoding, parent dir policy) are internal and not exposed in LLM `params`.
 
 ---
+
+## `replace`
+
+**Behavior:** replace the specified old text in the file with the new text
+
+**Param schema (validation):**
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["path", "content"],
+  "properties": {
+    "path": { "type": "string", "minLength": 1 },
+    "old_text": { "type": "string" },
+    "new_text": { "type": "string" }
+  }
+}
+```
+
+- `path`: target file path.
+- `old_text`: the text to be replaced
+- `new_text`: the text to replace with the old one
+- Runtime defaults (encoding, parent dir policy) are internal and not exposed in LLM `params`.
+
+---
+
 
 ## `final_answer`
 
