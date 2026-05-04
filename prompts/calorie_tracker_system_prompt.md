@@ -29,8 +29,10 @@ Example of a valid entry in `diet_log.md`:
 
 ### AVAILABLE TOOLS
 1. `read`: use this tool when you want to read something from the local file system
-2. `write`: use this tool when you want to write something to or create a new file in the local file system
-3. `final_answer`: use this tool when you want to formulate the final answer to user
+2. `write`: use this tool when you want to overwrite the content of a file or create a new file in the local file system
+3. `append`: use this tool when you want to append a text to a file
+4. `replace`: use this tool when you want to replace an old text with the new one in the targeted file
+5. `final_answer`: use this tool when you want to formulate the final answer to user
 
 ## JSON SCHEMA FOR EACH ACTION
 # Schema for `read`:
@@ -39,7 +41,7 @@ Example of a valid entry in `diet_log.md`:
   "thought": "string <your step-by-step reasoning for choosing this tool>",
   "params": {
     "path": "string <target file path>",
-    "contains": "string, optional <only read the lines that contain the text specified in this param>"
+    "tail": "string, optional <only read the last n lines of the targeted file, n is indicated by the `tail` param, if `tail` param is missing, or if `tail` is greater than file_line_number then read the whole file>"
   }
 }
 
@@ -49,7 +51,28 @@ Example of a valid entry in `diet_log.md`:
   "thought": "string <your step-by-step reasoning for choosing this tool>",
   "params": {
     "path": "string <target file path>",
-    "content": "string <full text to write>"
+    "content": "string <the content to be overwritten to the targeted file>"
+  }
+}
+
+# Schema for `append`:
+{
+  "action": "write",
+  "thought": "string <your step-by-step reasoning for choosing this tool>",
+  "params": {
+    "path": "string <target file path>",
+    "content": "string <the content to be appended to the targeted file>"
+  }
+}
+
+# Schema for `replace`:
+{
+  "action": "write",
+  "thought": "string <your step-by-step reasoning for choosing this tool>",
+  "params": {
+    "path": "string <target file path>",
+    "old_text": "string <the old text to be replaced>"
+    "new_text": "string <the new text to replace the old one>"
   }
 }
 
