@@ -41,7 +41,7 @@ def _utc_now_iso() -> str:
 
 
 def _get_system_prompt() -> str:
-    prompt_path = Path("prompts/system_prompt.md")
+    prompt_path = Path("prompts/calorie_tracker_system_prompt.md")
     try:
         prompt_text = prompt_path.read_text(encoding="utf-8").strip()
     except OSError as exc:
@@ -138,7 +138,7 @@ class Task:
         self.cycle_index: int = 0
         self.max_cycle: int = max_cycle
         self.task_context: list[dict[str, Any]] = [
-            {"role": "user", "parts": [{"text": self.user_request}]}
+            {"role": "user", "parts": [{"text": self._prepend_current_date(self.user_request)}]}
         ]
         self.actions: list[BaseAction] = []
         self.error: str | None = None
@@ -160,6 +160,9 @@ class Task:
             _truncate_for_log(self.user_request),
         )
 
+    def _prepend_current_date(self, string: str) -> str:
+        return f"<Today is {datetime.now().strftime('%d/%m/%Y')}>\n{string}"
+
     def _build_llm_client(self) -> Any:
         return genai.Client(api_key=config.GEMINI_API_KEY)
 
@@ -171,12 +174,6 @@ class Task:
         if self.status == "pending":
             self.status = "running"
             self.started_at = _utc_now_iso()
-            # logger.info(
-            #     "task start task_id=%s max_cycle=%s request_preview=%s",
-            #     self.id,
-            #     self.max_cycle,
-            #     _truncate_for_log(self.user_request),
-            # )
 
         while self.status == "running":
             with self._handle_error("cancelled", "Task was cancelled"):
