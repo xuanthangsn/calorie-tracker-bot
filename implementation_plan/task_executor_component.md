@@ -1,10 +1,10 @@
-# Task component — abstract implementation plan
+# Task executor component — abstract implementation plan
 
-- A **Task** is one user-originated run of the agent: from the initial user request through a **bounded** ReAct loop until a final reply to the user or terminal failure.
-- A **Task** will encapsulate all the state, the interaction so far with LLM to perform the current task, and perform the ReAct loop (parsing LLM response, initializing corresponding **Action**, execute it, sending the result back to LLM, and repeat)
+- A **TaskExecutor** is one user-originated run of the agent: from the initial user request through a **bounded** ReAct loop until a final reply to the user or terminal failure.
+- A **TaskExecutor** will encapsulate all the state, the interaction so far with LLM to perform the current task, and perform the ReAct loop (parsing LLM response, initializing corresponding **Action**, execute it, sending the result back to LLM, and repeat)
 
 
-## Class: `Task`
+## Class: `TaskExecutor`
 
 **Core properties (conceptual)**
 
@@ -40,7 +40,7 @@
 
 - force the Task to be cancelled when the cycle_index exceed the max_cycle, in such case, the status of the task will be 'failed'
 
-**Task life cycle**
+**Task executor life cycle**
 
 - caller initialize an instance of **Task**, with an user's initial request task = Task(user_request="What is my favourite football player?"), then the caller call task.execute() to start the task
 - caller can call task.force_stop() to forcefully stop the task from executing
@@ -50,4 +50,4 @@
 
 **Error model**
 
-- **`TaskError`** (or reuse a small hierarchy): invalid task setup, illegal state transition, max cycles exceeded without completion — distinct from `ActionValidationError` / `ActionError` on the action side.
+- **`TaskExecutorError`** (or reuse a small hierarchy): invalid task setup, illegal state transition, max cycles exceeded without completion — distinct from `ActionValidationError` / `ActionError` on the action side.
