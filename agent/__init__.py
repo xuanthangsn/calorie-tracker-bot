@@ -5,7 +5,7 @@ from .append_action import AppendAction
 from .final_answer_action import FinalAnswerAction
 from .read_action import ReadAction
 from .replace_action import ReplaceAction
-from .task_executor import TaskExecutor, TaskExecutorError
+from .task import Task, TaskError
 from .write_action import WriteAction
 
 __all__ = [
@@ -16,7 +16,7 @@ __all__ = [
     "FinalAnswerAction",
     "ReadAction",
     "ReplaceAction",
-    "TaskExecutor",
-    "TaskExecutorError",
+    "Task",
+    "TaskError",
     "WriteAction",
 ]

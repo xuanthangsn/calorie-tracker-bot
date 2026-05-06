@@ -1,8 +1,7 @@
-"""Task executor component implementing bounded ReAct execution."""
+"""Task component implementing bounded ReAct execution."""
 from __future__ import annotations
 
 import json
-import logging
 import uuid
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -24,6 +23,7 @@ from agent.write_action import WriteAction
 from google import genai
 from google.genai import types
 
+import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -40,19 +40,19 @@ def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-class TaskExecutorError(RuntimeError):
-    """Raised for TaskExecutor-level failures in orchestration or lifecycle."""
-
-
 def _get_system_prompt() -> str:
     prompt_path = Path("prompts/calorie_tracker_system_prompt.md")
     try:
         prompt_text = prompt_path.read_text(encoding="utf-8").strip()
     except OSError as exc:
-        raise TaskExecutorError(f"failed to load system prompt file '{prompt_path}': {exc}") from exc
+        raise TaskError(f"failed to load system prompt file '{prompt_path}': {exc}") from exc
     if not prompt_text:
-        raise TaskExecutorError(f"system prompt file is empty: '{prompt_path}'")
+        raise TaskError(f"system prompt file is empty: '{prompt_path}'")
     return prompt_text
+
+
+class TaskError(RuntimeError):
+    """Raised for Task-level failures in orchestration or lifecycle."""
 
 
 class LLMResponse(BaseModel):
@@ -62,6 +62,7 @@ class LLMResponse(BaseModel):
     action: str = Field(min_length=1)
     thought: str = Field(min_length=1)
     params: dict[str, Any]
+
 
 
 class ActionType(Enum):
@@ -87,7 +88,7 @@ class _Observation:
         return f"OBSERVATION:\n{json.dumps(payload, ensure_ascii=True)}"
 
 
-class TaskExecutor:
+class Task:
     """One user-originated run with bounded ReAct cycles."""
 
     ACTION_REGISTRY: dict[str, Callable[[ActionParam], BaseAction]] = {
@@ -109,7 +110,7 @@ class TaskExecutor:
             self.error = error_message
             self.finished_at = _utc_now_iso()
             logger.error(
-                "react_cycle terminal task_executor_id=%s status=%s cycle=%s error=%s exc=%s",
+                "react_cycle terminal task_id=%s status=%s cycle=%s error=%s exc=%s",
                 self.id,
                 status,
                 self.cycle_index,
@@ -117,7 +118,7 @@ class TaskExecutor:
                 exc,
                 exc_info=status == "failed",
             )
-            raise TaskExecutorError(error_message) from exc
+            raise TaskError(error_message) from exc
 
     def __init__(
         self,
@@ -126,9 +127,9 @@ class TaskExecutor:
         model_name: str = "gemini-3-flash-preview",
     ) -> None:
         if not isinstance(user_request, str) or not user_request.strip():
-            raise TaskExecutorError("user_request must be a non-empty string")
+            raise TaskError("user_request must be a non-empty string")
         if max_cycle <= 0:
-            raise TaskExecutorError("max_cycle must be > 0")
+            raise TaskError("max_cycle must be > 0")
 
         self.id: str = str(uuid.uuid4())
         self.user_request: str = user_request.strip()
@@ -146,14 +147,14 @@ class TaskExecutor:
         self.finished_at: str | None = None
         self._stop_requested: bool = False
         self._model_name = model_name
+   
 
         try:
             self._client = self._build_llm_client()
         except Exception as exc:
-            raise TaskExecutorError(f"failed to build LLM client: {exc}") from exc
+            raise TaskError(f"failed to build LLM client: {exc}") from exc
 
-        logger.info(
-            "task_executor initialized task_executor_id=%s max_cycle=%s request_preview=%s",
+        logger.info("task initialized task_id=%s max_cycle=%s request_preview=%s",
             self.id,
             self.max_cycle,
             _truncate_for_log(self.user_request),
@@ -168,16 +169,16 @@ class TaskExecutor:
     def execute(self) -> str:
         """Run bounded ReAct loop until completion, cancel, or failure."""
         if self.status not in {"pending", "running"}:
-            raise TaskExecutorError(f"cannot execute task executor from status '{self.status}'")
+            raise TaskError(f"cannot execute task from status '{self.status}'")
 
         if self.status == "pending":
             self.status = "running"
             self.started_at = _utc_now_iso()
 
         while self.status == "running":
-            with self._handle_error("cancelled", "Task executor was cancelled"):
+            with self._handle_error("cancelled", "Task was cancelled"):
                 if self._stop_requested:
-                    raise RuntimeError("Task executor was cancelled")
+                    raise RuntimeError("Task was cancelled")
 
             with self._handle_error("failed", "Max cycles exceeded without completion"):
                 if self.cycle_index >= self.max_cycle:
@@ -185,7 +186,7 @@ class TaskExecutor:
 
             self.cycle_index += 1
             logger.info(
-                "react_cycle begin task_executor_id=%s cycle=%s/%s",
+                "react_cycle begin task_id=%s cycle=%s/%s",
                 self.id,
                 self.cycle_index,
                 self.max_cycle,
@@ -195,7 +196,7 @@ class TaskExecutor:
                 llm_raw = self._call_llm()
 
             logger.info(
-                "react_cycle llm_raw task_executor_id=%s cycle=%s chars=%s preview=%s",
+                "react_cycle llm_raw task_id=%s cycle=%s chars=%s preview=%s",
                 self.id,
                 self.cycle_index,
                 len(llm_raw),
@@ -206,7 +207,7 @@ class TaskExecutor:
                 parsed = self._parse_llm_response(llm_raw)
 
             logger.info(
-                "react_cycle llm_parsed task_executor_id=%s cycle=%s action=%s thought_preview=%s param_keys=%s",
+                "react_cycle llm_parsed task_id=%s cycle=%s action=%s thought_preview=%s param_keys=%s",
                 self.id,
                 self.cycle_index,
                 parsed.action,
@@ -222,6 +223,7 @@ class TaskExecutor:
                 if action_cls is None:
                     raise ValueError(f"unknown action: '{action_name}'")
 
+            # if this is the last cycle, and the action is not final_answer, raise an error
             with self._handle_error("failed", "Max cycles exceeded without completion"):
                 if self.cycle_index >= self.max_cycle and action_name != ActionType.FINAL_ANSWER.value:
                     raise RuntimeError("Max cycles exceeded without completion")
@@ -233,8 +235,13 @@ class TaskExecutor:
                 output = action.execute()
 
             self.actions.append(action)
+            # out_preview = (
+            #     f"<write content_len={len(output)}>"
+            #     if action_name == ActionType.WRITE.value
+            #     else _truncate_for_log(output)
+            # )
             logger.info(
-                "react_cycle action_success task_executor_id=%s cycle=%s action=%s output=%s",
+                "react_cycle action_success task_id=%s cycle=%s action=%s output=%s",
                 self.id,
                 self.cycle_index,
                 action_name,
@@ -242,13 +249,19 @@ class TaskExecutor:
             )
 
             self._append_observation(_Observation(action_name, "success", output))
+            # logger.info(
+            #     "react_cycle observation task_id=%s cycle=%s tool=%s status=success",
+            #     self.id,
+            #     self.cycle_index,
+            #     action_name,
+            # )
 
             if action_name == ActionType.FINAL_ANSWER.value:
                 self.final_response = output
                 self.status = "completed"
                 self.finished_at = _utc_now_iso()
                 logger.info(
-                    "task_executor completed task_executor_id=%s cycles_used=%s final_preview=%s",
+                    "task completed task_id=%s cycles_used=%s final_preview=%s",
                     self.id,
                     self.cycle_index,
                     _truncate_for_log(output),
@@ -257,7 +270,7 @@ class TaskExecutor:
 
         if self.status == "completed" and self.final_response is not None:
             return self.final_response
-        raise TaskExecutorError(self.error or "task executor ended without final response")
+        raise TaskError(self.error or "task ended without final response")
 
     def _call_llm(self) -> str:
         response = self._client.models.generate_content(
