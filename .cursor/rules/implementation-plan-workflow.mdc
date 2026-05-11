@@ -23,5 +23,3 @@ Before **any** code change:
 1. **Analyze** — Review existing `.md` files under `./implementation_plan` for the relevant component(s).
 2. **Draft/update** — Edit the existing plan or add a new `.md` for new components.
 3. **Get approval** — Present the plan change to the user and obtain **explicit approval** before editing non-plan source files.
-
-Token-optimized checklist: design doc → related `implementation_plan` → `implementation` plan → user OK → then code.
