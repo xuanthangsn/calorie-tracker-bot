@@ -16,11 +16,11 @@ If work would contradict those documents, **stop**, warn the user, and resolve t
 
 ## No code without a documented plan
 
-The `./implementation` directory holds per-component **architectural and implementation plans** (Markdown). You are **forbidden** from writing or modifying application **code** without an up-to-date documented plan.
+The `./implementation_plan` directory holds per-component **architectural and implementation plans** (Markdown). You are **forbidden** from writing or modifying application **code** without an up-to-date documented plan.
 
 Before **any** code change:
 
-1. **Analyze** — Review existing `.md` files under `./implementation` for the relevant component(s).
+1. **Analyze** — Review existing `.md` files under `./implementation_plan` for the relevant component(s).
 2. **Draft/update** — Edit the existing plan or add a new `.md` for new components.
 3. **Get approval** — Present the plan change to the user and obtain **explicit approval** before editing non-plan source files.
 
