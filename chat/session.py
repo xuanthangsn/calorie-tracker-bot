@@ -1,44 +1,61 @@
-"""Isolated per-chat session base."""
+"""Isolated per-chat session base (asyncio)."""
 
 from __future__ import annotations
 
-import queue
-import threading
+import asyncio
 from abc import ABC, abstractmethod
-from queue import Queue
-
-from chat.messages import IncomingMessage, OutgoingMessage
-
+from collections.abc import Awaitable, Callable
 from enum import Enum, auto
+
+from chat.messages import IncomingMessage
+
+SendReplyCallback = Callable[[str], Awaitable[None]]
+
 
 class ChatSessionState(Enum):
     PENDING = auto()
     ACTIVE = auto()
 
+
 class BaseChatSession(ABC):
-    """One chat: private inbox, worker thread, replies via dispatcher global outbox."""
+    """One chat: private inbox, async worker task, replies via dispatcher-provided callback."""
 
-    def __init__(self, session_id: str, global_outbox: Queue[OutgoingMessage]) -> None:
+    def __init__(self, session_id: str, send_reply: SendReplyCallback) -> None:
         self.session_id = session_id
-        self.global_outbox = global_outbox
-        self.inbox: Queue[IncomingMessage] = queue.Queue()
+        self._enqueue_reply = send_reply
+        self.inbox: asyncio.Queue[IncomingMessage] = asyncio.Queue()
+        self._worker_task: asyncio.Task[None] | None = None
 
-        self._worker = threading.Thread(target=self._worker_loop, daemon=True)
+    async def start(self) -> None:
+        if self._worker_task is not None:
+            return
+        self._worker_task = asyncio.create_task(
+            self._worker_loop(),
+            name=f"session-{self.session_id}",
+        )
 
-    def start(self) -> None:
-        self._worker.start()
+    async def stop(self, timeout: float | None = 5.0) -> None:
+        if self._worker_task is None:
+            return
+        self._worker_task.cancel()
+        try:
+            await asyncio.wait_for(self._worker_task, timeout=timeout)
+        except (asyncio.CancelledError, asyncio.TimeoutError):
+            pass
+        finally:
+            self._worker_task = None
 
-    def stop(self, timeout: float | None = None) -> None:
-        self._worker.join(timeout)
+    async def _worker_loop(self) -> None:
+        try:
+            while True:
+                message = await self.inbox.get()
+                await self._handle_request(message)
+        except asyncio.CancelledError:
+            return
 
-    def _worker_loop(self) -> None:
-        while True:
-            message = self.inbox.get(block=True)
-            self.handle_request(message)
-
-    def _send_reply(self, text: str) -> None:
-        self.global_outbox.put(OutgoingMessage(self.session_id, text))
+    async def _send_reply(self, text: str) -> None:
+        await self._enqueue_reply(text)
 
     @abstractmethod
-    def _handle_request(self, message: IncomingMessage) -> None:
-        """Process one inbound message; use :meth:`send_reply` to respond."""
+    async def _handle_request(self, message: IncomingMessage) -> None:
+        """Process one inbound message; use :meth:`_send_reply` to respond."""

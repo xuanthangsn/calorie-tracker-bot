@@ -1,6 +1,8 @@
 # Plan: Decoupled Message Handling Architecture
 
-High-level components managing the flow of messages between the external network and the internal system. The components communicate entirely asynchronously via thread-safe queues (message passing) and have no direct method-call coupling or awareness of each other's internal logic.
+> **Current code:** single **asyncio** event loop — `asyncio.Queue`, `asyncio.Lock`, `asyncio.create_task` (see [`chat/dispatcher.py`](../chat/dispatcher.py), [`chat/session.py`](../chat/session.py), [`telegram_dispatcher.md`](telegram_dispatcher.md)). Illustrative `threading` / `queue.Queue` snippets below are legacy design notes.
+
+High-level components managing the flow of messages between the external network and the internal system. The components communicate entirely asynchronously via message passing and have no direct method-call coupling or awareness of each other's internal logic.
 
 ---
 

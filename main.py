@@ -1,16 +1,13 @@
-"""Bot startup with Telegram polling."""
+"""Bot startup: TelegramDispatcher + async chat sessions on one event loop."""
 from __future__ import annotations
 
 import asyncio
 import logging
 import sys
 
-from aiogram import Bot, Dispatcher
-from aiogram.client.default import DefaultBotProperties
-from aiogram.enums import ParseMode
-
 import config
-from bot.handlers import router
+from chat.echo_session import EchoChatSession
+from chat.telegram_dispatcher import TelegramDispatcher
 
 
 async def main() -> None:
@@ -23,14 +20,16 @@ async def main() -> None:
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
     )
 
-    bot = Bot(
-        config.TELEGRAM_TOKEN,
-        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+    dispatcher = TelegramDispatcher(
+        bot_token=config.TELEGRAM_TOKEN,
+        session_factory=lambda session_id, send_reply: EchoChatSession(session_id, send_reply),
     )
-    dp = Dispatcher()
-    dp.include_router(router)
-    await dp.start_polling(bot)
+    logging.info("Telegram dispatcher starting")
+    await dispatcher.run()
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logging.info("shutting down")
