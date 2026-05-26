@@ -2,12 +2,13 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from aiogram.types import Message
 
-from chat.messages import IncomingMessage, OutgoingMessage
+from chat.messages import SessionInboundMsg, SessionOutboundMsg
 from chat.session import BaseChatSession
 from chat.telegram_dispatcher import (
     TelegramDispatcher,
@@ -30,13 +31,13 @@ def _message(text: str | None, chat_id: int = 100, user_id: int = 200) -> Messag
 
 
 class StubChatSession(BaseChatSession):
-    def __init__(self, session_id: str, send_reply) -> None:
-        super().__init__(session_id, send_reply)
-        self.handled: list[IncomingMessage] = []
+    def __init__(self, session_id: str, inbound_queue, outbound_queue) -> None:
+        super().__init__(session_id, inbound_queue, outbound_queue)
+        self.handled: list[SessionInboundMsg] = []
 
-    async def _handle_request(self, message: IncomingMessage) -> None:
+    async def handle_msg(self, message: SessionInboundMsg) -> str:
         self.handled.append(message)
-        await self._send_reply("ok")
+        return "ok"
 
 
 class TestMessageParsingHelpers:
@@ -56,60 +57,71 @@ class TestTelegramDispatcherInit:
         assert TelegramDispatcher.name == "telegram"
         dispatcher = TelegramDispatcher(
             _VALID_TEST_BOT_TOKEN,
-            lambda sid, send_reply: StubChatSession(sid, send_reply),
+            lambda sid, in_q, out_q: StubChatSession(sid, in_q, out_q),
         )
         assert dispatcher.get_name() == "telegram"
         assert TelegramDispatcher.get_name() == "telegram"
 
     def test_empty_bot_token_raises(self) -> None:
         with pytest.raises(ValueError, match="bot_token"):
-            TelegramDispatcher("", lambda sid, send_reply: StubChatSession(sid, send_reply))
+            TelegramDispatcher("", lambda sid, in_q, out_q: StubChatSession(sid, in_q, out_q))
 
     def test_whitespace_bot_token_raises(self) -> None:
         with pytest.raises(ValueError, match="bot_token"):
-            TelegramDispatcher("   ", lambda sid, send_reply: StubChatSession(sid, send_reply))
+            TelegramDispatcher("   ", lambda sid, in_q, out_q: StubChatSession(sid, in_q, out_q))
 
 
 class TestTelegramDispatcherPayloadMapping:
-    def test_generate_session_id(self) -> None:
+    def test_create_session_id(self) -> None:
         dispatcher = TelegramDispatcher(
             _VALID_TEST_BOT_TOKEN,
-            lambda sid, send_reply: StubChatSession(sid, send_reply),
+            lambda sid, in_q, out_q: StubChatSession(sid, in_q, out_q),
         )
-        assert dispatcher._generate_session_id({"chat_id": 42, "text": "hi"}) == "42"
+        payload = dispatcher.parse_raw_data({"chat_id": 42, "text": "hi", "message_id": 1})
+        assert dispatcher.create_session_id(payload) == "42"
 
-    def test_to_incoming_message(self) -> None:
+    def test_to_session_inbound_message(self) -> None:
         dispatcher = TelegramDispatcher(
             _VALID_TEST_BOT_TOKEN,
-            lambda sid, send_reply: StubChatSession(sid, send_reply),
+            lambda sid, in_q, out_q: StubChatSession(sid, in_q, out_q),
         )
-        incoming = dispatcher._to_incoming_message(
-            "100", {"chat_id": 100, "text": "hello", "message_id": 1}
+        payload = dispatcher.parse_raw_data(
+            {
+                "chat_id": 100,
+                "text": "hello",
+                "message_id": 1,
+                "time": datetime.now(timezone.utc),
+            }
         )
-        assert incoming.session_id == "100"
-        assert incoming.text == "hello"
+        incoming = dispatcher.get_input_msg_from_parsed_data(payload)
+        assert incoming.message == "hello"
 
 
 class TestTelegramDispatcherRouting:
-    def test_process_inbound_msg_creates_session_and_processes(self) -> None:
+    def test_process_incoming_msg_creates_session_and_processes(self) -> None:
         async def run() -> None:
             dispatcher = TelegramDispatcher(
                 _VALID_TEST_BOT_TOKEN,
-                lambda sid, send_reply: StubChatSession(sid, send_reply),
+                lambda sid, in_q, out_q: StubChatSession(sid, in_q, out_q),
             )
-            await dispatcher._process_inbound_msg(
+            await dispatcher.process_incoming_msg(
                 {"chat_id": 100, "text": "hello", "message_id": 1}
             )
             for _ in range(50):
                 async with dispatcher._session_lock:
-                    session = dispatcher._active_sessions.get("100")
+                    record = dispatcher._registered_sessions.get("100")
+                    session = record.session if record is not None else None
                 if session is not None and session.handled:
                     break
                 await asyncio.sleep(0.02)
             async with dispatcher._session_lock:
-                session = dispatcher._active_sessions["100"]
+                session = dispatcher._registered_sessions["100"].session
             assert len(session.handled) == 1
-            assert session.handled[0].text == "hello"
+            assert session.handled[0].message == "hello"
+            outbound = await dispatcher._outbound_queue.get()
+            assert outbound.session_id == "100"
+            assert outbound.message == "ok"
+            await dispatcher.shutdown()
 
         asyncio.run(run())
 
@@ -119,10 +131,16 @@ class TestTelegramDispatcherOutbound:
         async def run() -> None:
             dispatcher = TelegramDispatcher(
                 _VALID_TEST_BOT_TOKEN,
-                lambda sid, send_reply: StubChatSession(sid, send_reply),
+                lambda sid, in_q, out_q: StubChatSession(sid, in_q, out_q),
             )
             dispatcher._bot.send_message = AsyncMock()
-            await dispatcher._send_outgoing(OutgoingMessage("123", "reply text"))
+            await dispatcher._send_outgoing(
+                SessionOutboundMsg(
+                    session_id="123",
+                    message="reply text",
+                    time=datetime.now(timezone.utc),
+                )
+            )
             dispatcher._bot.send_message.assert_awaited_once_with(
                 chat_id=123,
                 text="reply text",
@@ -134,10 +152,16 @@ class TestTelegramDispatcherOutbound:
         async def run() -> None:
             dispatcher = TelegramDispatcher(
                 _VALID_TEST_BOT_TOKEN,
-                lambda sid, send_reply: StubChatSession(sid, send_reply),
+                lambda sid, in_q, out_q: StubChatSession(sid, in_q, out_q),
             )
             dispatcher._bot.send_message = AsyncMock()
-            await dispatcher._send_outgoing(OutgoingMessage("bad-id", "text"))
+            await dispatcher._send_outgoing(
+                SessionOutboundMsg(
+                    session_id="bad-id",
+                    message="text",
+                    time=datetime.now(timezone.utc),
+                )
+            )
             dispatcher._bot.send_message.assert_not_called()
 
         asyncio.run(run())

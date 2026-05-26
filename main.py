@@ -22,7 +22,9 @@ async def main() -> None:
 
     dispatcher = TelegramDispatcher(
         bot_token=config.TELEGRAM_TOKEN,
-        session_factory=lambda session_id, send_reply: EchoChatSession(session_id, send_reply),
+        session_factory=lambda session_id, inbound_queue, outbound_queue: EchoChatSession(
+            session_id, inbound_queue, outbound_queue
+        ),
     )
     logging.info("Telegram dispatcher starting")
     await dispatcher.run()

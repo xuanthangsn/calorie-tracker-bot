@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from chat.messages import IncomingMessage
+from chat.messages import SessionInboundMsg
 from chat.session import BaseChatSession
 
 
 class EchoChatSession(BaseChatSession):
-    """Echo user text back through the dispatcher outbox."""
+    """Echo user text back through the dispatcher outbound queue."""
 
-    async def _handle_request(self, message: IncomingMessage) -> None:
-        await self._send_reply(f"You said: {message.text}")
+    async def handle_msg(self, message: SessionInboundMsg) -> str:
+        return f"You said: {message.message}"

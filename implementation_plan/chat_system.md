@@ -1,6 +1,6 @@
 # Plan: Decoupled Message Handling Architecture
 
-> **Current code:** single **asyncio** event loop — `asyncio.Queue`, `asyncio.Lock`, `asyncio.create_task` (see [`chat/dispatcher.py`](../chat/dispatcher.py), [`chat/session.py`](../chat/session.py), [`telegram_dispatcher.md`](telegram_dispatcher.md)). Illustrative `threading` / `queue.Queue` snippets below are legacy design notes.
+> **Current code:** single **asyncio** event loop — `asyncio.Queue`, `asyncio.Lock`, `asyncio.create_task` (see [`chat/dispatcher.py`](../chat/dispatcher.py), [`chat/session.py`](../chat/session.py), [`telegram_dispatcher.md`](telegram_dispatcher.md)). Dispatcher injects `inbound_queue`/`outbound_queue` into sessions; sessions only handle messages.
 
 High-level components managing the flow of messages between the external network and the internal system. The components communicate entirely asynchronously via message passing and have no direct method-call coupling or awareness of each other's internal logic.
 
@@ -12,12 +12,14 @@ High-level components managing the flow of messages between the external network
 
 **Implementation requirements:**
 
-* **Global Outbox:** Maintain a single **bounded** thread-safe queue to collect outgoing messages from all active sessions (see [Bounded queues](#bounded-queues-backpressure)).
-* **Session Registry:** Maintain a dictionary or map tracking active sessions by their unique session ID.
-* **Inbound Loop:** Run a dedicated background thread that continuously polls the external chat API for new messages.
-* **Routing Logic:** Extract the session ID from incoming messages. If the session exists, push the message into its private inbox. If it does not exist, instantiate a new session, register it, and then push the message.
-* **Outbound Loop:** Run a dedicated background thread that continuously blocks on the global outbox, popping messages as they arrive and executing the actual network send operations.
-* **Shutdown:** Support cooperative **graceful shutdown** with a documented `shutdown` entrypoint and joinable loop threads (see [Graceful shutdown](#graceful-shutdown)).
+* **Shared Outbound Queue:** Maintain a single **bounded** shared `outbound_queue` to collect outgoing session messages from all active sessions.
+* **Session Registry:** Maintain `registered_session: dict[session_id, SessionRecord[T_MsgPayload]]`.
+* **Parsing:** Validate raw transport data with `parse_raw_data(raw_data) -> T_MsgPayload`.
+* **Session ID Strategy:** Derive session ID via `create_session_id(payload)`.
+* **Input Mapping:** Convert parsed payload to `SessionInboundMsg` via `get_input_msg_from_parsed_data(payload)`.
+* **Routing Logic:** In `process_incoming_msg(raw_data)`, create session record lazily, inject `inbound_queue`/shared `outbound_queue`, `start()` session once, then enqueue inbound message.
+* **Outbound Loop:** Consume shared `outbound_queue`, execute concrete network send operation.
+* **Shutdown:** Support cooperative **graceful shutdown** with a documented `shutdown` entrypoint and joinable tasks.
 
 **Implementation example:**
 ```code
@@ -65,13 +67,13 @@ _Illustration only: add stop events, `shutdown()`, lock-safe routing, and sessio
 
 **Implementation requirements:**
 
-* **Private Inbox:** Maintain a dedicated **bounded** thread-safe queue to receive incoming messages routed specifically to this session (see [Bounded queues](#bounded-queues-backpressure)).
-* **Outbox Reference:** Hold a reference to the Dispatcher's global outbox in order to pass outgoing messages back up the chain.
-* **Active Worker Thread:** Automatically spin up a dedicated background worker thread immediately upon instantiation.
+* **Inbound Queue:** Receive an injected **bounded** `inbound_queue` from the dispatcher.
+* **Outbound Queue:** Receive an injected shared **bounded** `outbound_queue` from the dispatcher.
+* **Active Worker Task:** Spin up a dedicated async worker task via `start()`.
 * **Shutdown:** Session worker must participate in **graceful shutdown** (stop signal or sentinel) so threads can join (see [Graceful shutdown](#graceful-shutdown)).
-* **Worker Loop:** Implement a loop that blocks until a new message arrives or until **shutdown** is requested (see [Graceful shutdown](#graceful-shutdown)); must not spin CPU.
-* **Request Handler:** Implement a method triggered by the worker loop to process the popped message, load any necessary historical context, execute the core reasoning logic, and determine the response.
-* **Send Mechanism:** Implement a fire-and-forget method to package the final response and drop it into the global outbox.
+* **Worker Loop:** `poll_incoming_msg` blocks on `inbound_queue.get()`, calls `handle_msg`, then enqueues `SessionOutboundMsg` to `outbound_queue`.
+* **Request Handler:** Session only implements `handle_msg(msg)`; it knows nothing about dispatcher internals.
+* **Send Mechanism:** Session creates outbound envelopes itself including current timestamp.
 
 **Implementation example**
 ```code
@@ -114,19 +116,35 @@ class BaseChatSession(ABC):
 _Illustration only: the worker `while True` must be replaced with shutdown-aware logic as in [Graceful shutdown](#graceful-shutdown)._
 
 ## `Data envelopes` (The contracts)
-Standardized payloads used to pass data between threads without exposing component internals
+Standardized payloads used between components without exposing dispatcher internals.
 
 ```code
 from dataclasses import dataclass
 
 @dataclass
-class IncomingMessage:
-    session_id: str
-    text: str
+class SessionInboundMsg:
+    message: str
+    time: datetime
 
 @dataclass
-class OutgoingMessage:
+class SessionOutboundMsg:
     session_id: str
-    text: str
+    message: str
+    time: datetime
 ```
 ---
+
+## Generic dispatcher payload contract
+
+Each concrete dispatcher defines a typed payload for validated incoming network data.
+
+```code
+class BaseMessagePayload(ABC): ...
+T_MsgPayload = TypeVar("T_MsgPayload", bound=BaseMessagePayload)
+
+@dataclass
+class SessionRecord(Generic[T_MsgPayload]):
+    session: BaseChatSession
+    inbound_queue: asyncio.Queue[SessionInboundMsg]
+    msg_payload: T_MsgPayload
+```
